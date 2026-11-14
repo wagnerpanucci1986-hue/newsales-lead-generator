@@ -1,0 +1,53 @@
+import { z } from 'zod';
+
+// Validação das variáveis de ambiente: o processo não sobe com configuração inválida.
+const bool = z
+  .enum(['true', 'false'])
+  .transform((v) => v === 'true');
+
+const schema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  APP_TIMEZONE: z.string().default('America/Sao_Paulo'),
+  LOG_LEVEL: z.string().default('info'),
+  WEB_URL: z.string().default('http://localhost:3000'),
+  API_PORT: z.coerce.number().int().default(4000),
+
+  DATABASE_URL: z.string().min(1),
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET precisa de ao menos 32 caracteres'),
+  ENCRYPTION_KEY: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, 'ENCRYPTION_KEY precisa ter 64 caracteres hex (openssl rand -hex 32)'),
+  COOKIE_SECURE: bool.default(false),
+
+  // Teto do produto: no máximo 10 números, mesmo que o .env peça mais.
+  MAX_NUMBERS: z.coerce.number().int().min(1).max(10).default(10),
+  MAX_UPLOAD_MB: z.coerce.number().int().default(50),
+  MAX_MEDIA_MB: z.coerce.number().int().default(100),
+
+  // Espelhamento
+  SYNC_FULL_HISTORY: bool.default(true),
+  HISTORY_MEDIA_DAYS: z.coerce.number().int().min(0).default(7),
+
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  STORAGE_LOCAL_PATH: z.string().default('./data/media'),
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_BUCKET: z.string().optional(),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
+  S3_FORCE_PATH_STYLE: bool.default(true),
+});
+
+const parsed = schema.safeParse(
+  // variáveis vazias no .env contam como ausentes
+  Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== '')),
+);
+if (!parsed.success) {
+  console.error('Configuração inválida:');
+  for (const issue of parsed.error.issues) console.error(`  ${issue.path.join('.')}: ${issue.message}`);
+  process.exit(1);
+}
+
+export const env = parsed.data;
