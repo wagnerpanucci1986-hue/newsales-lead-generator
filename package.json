@@ -1,0 +1,14 @@
+{
+  "name": "newsales-whatsapp",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "engines": { "node": ">=20.11" },
+  "scripts": {
+    "dev:api": "npm run dev -w apps/api",
+    "dev:worker": "npm run dev:worker -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "build": "npm run build --workspaces --if-present",
+    "db:migrate": "npm run db:migrate -w apps/api",
+    "db:seed": "npm run db:seed -w apps/api"
+  }
+}
