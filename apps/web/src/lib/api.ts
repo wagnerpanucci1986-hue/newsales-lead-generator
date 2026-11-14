@@ -16,6 +16,8 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    /** corpo da resposta de erro (ex.: twoFactorRequired no login) */
+    public readonly body: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -26,16 +28,21 @@ export const getAccessToken = () => accessToken;
 
 async function parse(res: Response) {
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, body.error ?? 'Não foi possível concluir a operação');
+  if (!res.ok) {
+    // Erros de validação trazem o motivo por campo; mostra os motivos em vez de só "Dados inválidos".
+    const issues = Array.isArray(body.issues) ? (body.issues as { message: string }[]).map((i) => i.message).filter(Boolean) : [];
+    const message = issues.length ? `${body.error}: ${[...new Set(issues)].join('; ')}` : (body.error ?? 'Não foi possível concluir a operação');
+    throw new ApiError(res.status, message, body);
+  }
   return body;
 }
 
-export async function login(email: string, password: string): Promise<User> {
+export async function login(email: string, password: string, code?: string): Promise<User> {
   const res = await fetch(`${API_URL}/api/auth/login`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, code: code || undefined }),
   });
   const body = await parse(res);
   accessToken = body.accessToken;
@@ -96,4 +103,9 @@ export async function apiUpload<T = unknown>(path: string, form: FormData): Prom
   let res = await send();
   if (res.status === 401 && (await refreshSession())) res = await send();
   return parse(res);
+}
+
+/** Guarda o access token devolvido por rotas que renovam a sessão (ex.: troca de senha). */
+export function adoptAccessToken(token: string): void {
+  accessToken = token;
 }
