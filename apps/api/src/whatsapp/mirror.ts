@@ -4,7 +4,7 @@ import { env } from '../config/env.js';
 import { publishEvent } from '../lib/events.js';
 import { logger } from '../lib/logger.js';
 import { isUniqueViolation, prisma } from '../lib/prisma.js';
-import { localDay } from '../lib/time.js';
+import { bumpDailyStat, type StatField } from '../lib/stats.js';
 import { brPhoneVariants, isJidGroup, isLidUser, isMirroredJid, isPnUser, normalizeJid, phoneFromJid } from './jid.js';
 import { mapWaStatus, parseMessage, previewOf, statusesBelow } from './parse.js';
 
@@ -20,7 +20,6 @@ export interface MirrorDeps {
   ownSource?(waMessageId: string): MessageSource | undefined;
 }
 
-type StatField = 'sent' | 'received' | 'delivered' | 'read' | 'failed';
 
 const MAX_CACHE = 5000;
 
@@ -35,6 +34,8 @@ export class Mirror {
   private readonly convCache = new Map<string, string>();
   /** nomes da agenda do aparelho, só em memória (não viram contatos de marketing) */
   private readonly names = new Map<string, string>();
+  /** conversa → último nome de perfil já gravado */
+  private readonly pushNames = new Map<string, string>();
 
   constructor(private readonly deps: MirrorDeps) {
     this.log = logger.child({ numberId: deps.numberId, mod: 'mirror' });
@@ -197,6 +198,8 @@ export class Mirror {
 
     const conversationId = await this.resolveConversation(jid, normalizeJid(key.remoteJidAlt), fromMe || group ? undefined : (msg.pushName ?? undefined));
 
+    if (!fromMe && !group && msg.pushName) await this.rememberPushName(conversationId, msg.pushName);
+
     const source = fromMe ? (this.deps.ownSource?.(key.id) ?? MessageSource.PHONE) : MessageSource.INBOUND;
     const waStatus = mapWaStatus(msg.status);
     const status = fromMe ? (!waStatus || waStatus === MessageStatus.PENDING ? MessageStatus.SENT : waStatus) : MessageStatus.RECEIVED;
@@ -324,13 +327,8 @@ export class Mirror {
     await publishEvent({ type: 'conversation.updated', numberId: this.numberId, payload: { conversationId: msg.conversationId } });
   }
 
-  private async bumpStat(field: StatField): Promise<void> {
-    const date = localDay();
-    await prisma.numberDailyStat.upsert({
-      where: { numberId_date: { numberId: this.numberId, date } },
-      create: { numberId: this.numberId, date, [field]: 1 },
-      update: { [field]: { increment: 1 } },
-    });
+  private bumpStat(field: StatField): Promise<void> {
+    return bumpDailyStat(this.numberId, field);
   }
 
   // ───────────── conversas e contatos ─────────────
@@ -440,6 +438,16 @@ export class Mirror {
   }
 
   private async touchPushName(contactId: string, pushName: string): Promise<void> {
-    await prisma.contact.updateMany({ where: { id: contactId, NOT: { pushName } }, data: { pushName } });
+    await prisma.contact.updateMany({ where: { id: contactId, OR: [{ pushName: null }, { pushName: { not: pushName } }] }, data: { pushName } });
+  }
+
+  /** Nome de perfil visto numa mensagem recebida: titula a conversa e atualiza o contato (uma vez por mudança). */
+  private async rememberPushName(conversationId: string, pushName: string): Promise<void> {
+    if (this.pushNames.get(conversationId) === pushName) return;
+    if (this.pushNames.size >= MAX_CACHE) this.pushNames.clear();
+    this.pushNames.set(conversationId, pushName);
+    await prisma.conversation.updateMany({ where: { id: conversationId, title: null }, data: { title: pushName } });
+    const conv = await prisma.conversation.findUnique({ where: { id: conversationId }, select: { contactId: true } });
+    if (conv?.contactId) await this.touchPushName(conv.contactId, pushName);
   }
 }

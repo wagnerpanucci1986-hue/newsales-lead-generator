@@ -52,4 +52,5 @@ O último item precisa ser validado na sua máquina ou servidor antes de seguir 
 7. **Versão do WhatsApp Web:** usa a versão embutida no Baileys. Se o WhatsApp passar a recusar conexões (erro 405), é preciso atualizar a biblioteca.
 8. **Sem proxy por número.** Todos os números saem pelo mesmo IP do servidor, o que é um sinal de risco de banimento em volume. Pode ser acrescentado depois.
 9. **Socket.IO e permissões:** se o acesso de um atendente a um número for alterado, a mudança vale no tempo real só depois que ele reconectar (as consultas à API respeitam na hora).
-10. **Envio pelo painel** ainda não existe — entra na fase 3 junto com a caixa de entrada. Autenticação em dois fatores e gestão de usuários entram na fase 5.
+10. **Correção posterior:** a API só liberava GET/POST no CORS, então editar e remover números pelo navegador falhava. Corrigido na fase 3, quando o teste de navegador passou a cobrir a edição.
+11. **Envio pelo painel** ainda não existe — entra na fase 3 junto com a caixa de entrada. Autenticação em dois fatores e gestão de usuários entram na fase 5.

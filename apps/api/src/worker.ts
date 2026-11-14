@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createMediaWorker } from './jobs/media.js';
+import { createOutboundWorker } from './jobs/outbound.js';
 import { createSessionWorker } from './jobs/session.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
@@ -33,7 +34,7 @@ async function main() {
   logger.info({ instanceId }, 'worker iniciado');
 
   const sessions = new SessionManager();
-  const workers = [createSessionWorker(sessions), createMediaWorker(sessions)];
+  const workers = [createSessionWorker(sessions), createMediaWorker(sessions), createOutboundWorker(sessions)];
 
   let stopping = false;
   const shutdown = async (signal: string, code = 0) => {

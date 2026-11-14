@@ -83,3 +83,17 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
   if (res.status === 401 && (await refreshSession())) res = await send();
   return parse(res);
 }
+
+/** Envio multipart (anexos). O navegador define o content-type com o boundary. */
+export async function apiUpload<T = unknown>(path: string, form: FormData): Promise<T> {
+  const send = () =>
+    fetch(`${API_URL}/api${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {},
+      body: form,
+    });
+  let res = await send();
+  if (res.status === 401 && (await refreshSession())) res = await send();
+  return parse(res);
+}

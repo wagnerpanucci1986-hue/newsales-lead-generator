@@ -5,7 +5,10 @@ import { usePathname } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/lib/auth';
 
 // Novas seções entram aqui conforme as fases são entregues.
-const NAV = [{ href: '/numeros', label: 'Números' }];
+const NAV = [
+  { href: '/conversas', label: 'Conversas' },
+  { href: '/numeros', label: 'Números' },
+];
 
 const ROLE_LABEL = { ADMIN: 'Administrador', MANAGER: 'Gestor', AGENT: 'Atendente' } as const;
 
@@ -13,7 +16,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   return (
-    <div className="min-h-screen md:flex">
+    <div className="flex h-dvh flex-col md:flex-row">
       <aside className="flex shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-4 py-3 md:w-56 md:flex-col md:items-stretch md:border-b-0 md:border-r md:py-5">
         <div className="text-sm font-semibold tracking-tight md:px-2 md:pb-3 md:text-base">NewSales WhatsApp</div>
         <nav className="flex flex-1 gap-1 md:flex-col">
@@ -38,7 +41,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <button onClick={logout} className="btn btn-secondary">Sair</button>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</main>
     </div>
   );
 }

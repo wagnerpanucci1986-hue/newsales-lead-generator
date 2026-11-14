@@ -66,7 +66,7 @@ export default function NumbersPage() {
   const full = (numbers?.length ?? 0) >= max;
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-6xl px-4 py-6 md:px-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Números</h1>

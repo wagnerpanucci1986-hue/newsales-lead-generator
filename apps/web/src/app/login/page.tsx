@@ -17,7 +17,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      router.replace('/numeros');
+      router.replace('/conversas');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível entrar');
       setLoading(false);

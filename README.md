@@ -10,7 +10,7 @@ Painel self-hosted de disparo e atendimento via WhatsApp: até 10 números conec
 |---|---|---|
 | 1 | Arquitetura, modelo de dados, estrutura de pastas | concluída — [docs/01-arquitetura.md](docs/01-arquitetura.md) |
 | 2 | Sessões múltiplas, QR Code, espelhamento | concluída — [docs/02-sessoes-e-espelhamento.md](docs/02-sessoes-e-espelhamento.md) |
-| 3 | Caixa de entrada unificada | pendente |
+| 3 | Caixa de entrada unificada | concluída — [docs/03-caixa-de-entrada.md](docs/03-caixa-de-entrada.md) |
 | 4 | Contatos, listas, campanhas, anti-banimento | pendente |
 | 5 | Automações, usuários, dashboard | pendente |
 | 6 | Docker Compose, instalação, operação | pendente |
@@ -27,7 +27,7 @@ npm run db:seed             # cria o primeiro administrador
 npm run dev:api             # API em http://localhost:4000
 npm run dev:worker          # sessões WhatsApp e filas (rode uma única instância)
 npm run dev:web             # painel em http://localhost:3000
-npm test -w apps/api        # testes de integração do espelhamento (usam o banco do .env)
+npm test -w apps/api        # testes de integração (gravam e apagam dados no banco do .env: use um banco de desenvolvimento)
 ```
 
 A instalação com Docker Compose entra na fase 6.

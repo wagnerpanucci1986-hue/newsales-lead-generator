@@ -215,9 +215,11 @@ model Contact {
   conversations Conversation[]
   recipients    CampaignRecipient[]
 
-  @@index([name])
   @@index([company])
   @@index([waStatus])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Contact_name_trgm_idx")
+  @@index([pushName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Contact_pushName_trgm_idx")
+  @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "Contact_phone_trgm_idx")
 }
 
 model Tag {
@@ -359,6 +361,7 @@ model Conversation {
   @@index([status, lastMessageAt(sort: Desc)])
   @@index([assignedUserId, status])
   @@index([contactId])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Conversation_title_trgm_idx")
 }
 
 model ConversationTag {
@@ -455,9 +458,10 @@ model Message {
   sentBy            User?              @relation(fields: [sentByUserId], references: [id], onDelete: SetNull)
   campaignRecipient CampaignRecipient? @relation(fields: [campaignRecipientId], references: [id], onDelete: SetNull)
   media             Media?
-  // Busca textual: índice GIN pg_trgm em "text" criado por SQL na migration (fase 3).
 
   @@unique([numberId, waMessageId])
+  // Busca textual (ILIKE '%termo%'): índice trigram. A extensão pg_trgm é criada na migration.
+  @@index([text(ops: raw("gin_trgm_ops"))], type: Gin, map: "Message_text_trgm_idx")
   @@index([conversationId, timestamp])
   @@index([numberId, timestamp])
 }

@@ -1,5 +1,6 @@
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import { ZodError } from 'zod';
@@ -9,14 +10,20 @@ import { prisma } from './lib/prisma.js';
 import { redis } from './lib/redis.js';
 import { HttpError } from './modules/auth/guard.js';
 import { authRoutes } from './modules/auth/routes.js';
+import { conversationRoutes } from './modules/conversations/routes.js';
+import { mediaRoutes } from './modules/media/routes.js';
+import { tagRoutes } from './modules/tags/routes.js';
+import { userRoutes } from './modules/users/routes.js';
 import { numberRoutes } from './modules/numbers/routes.js';
 import { attachRealtime } from './realtime/socket.js';
 
 async function main() {
   const app = Fastify({ loggerInstance: logger, trustProxy: true, bodyLimit: 1024 * 1024 });
 
-  await app.register(cors, { origin: env.WEB_URL, credentials: true });
+  // O padrão do plugin só libera GET/HEAD/POST; o painel também usa PATCH, PUT e DELETE.
+  await app.register(cors, { origin: env.WEB_URL, credentials: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'] });
   await app.register(cookie);
+  await app.register(multipart, { limits: { fileSize: env.MAX_UPLOAD_MB * 1024 * 1024, files: 1 } });
   await app.register(rateLimit, { global: true, max: 600, timeWindow: '1 minute', redis });
 
   app.setErrorHandler((err: unknown, req, reply) => {
@@ -38,6 +45,10 @@ async function main() {
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(numberRoutes, { prefix: '/api/numbers' });
+  await app.register(conversationRoutes, { prefix: '/api/conversations' });
+  await app.register(mediaRoutes, { prefix: '/api/media' });
+  await app.register(tagRoutes, { prefix: '/api/tags' });
+  await app.register(userRoutes, { prefix: '/api/users' });
 
   const io = attachRealtime(app.server);
 
