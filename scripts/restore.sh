@@ -30,4 +30,15 @@ fi
 echo "Aplicando migrations (caso o backup seja de uma versão anterior) e subindo…"
 docker compose run --rm migrate
 docker compose up -d api worker
-echo "Restauração concluída."
+
+# Só declara concluído quando a API responde (o painel dá erro 502 enquanto ela sobe).
+echo "Aguardando a API…"
+for _ in $(seq 1 60); do
+  if docker compose exec -T api node -e "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+    echo "Restauração concluída."
+    exit 0
+  fi
+  sleep 2
+done
+echo "A API não respondeu em 2 minutos. Veja: docker compose logs api" >&2
+exit 1

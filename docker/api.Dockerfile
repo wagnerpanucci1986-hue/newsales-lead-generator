@@ -19,7 +19,8 @@ FROM node:22-bookworm-slim AS runtime
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates ffmpeg \
  && rm -rf /var/lib/apt/lists/*
-ENV NODE_ENV=production
+# Sem aviso de "nova versão do Prisma" nos logs: a versão é fixada no package.json.
+ENV NODE_ENV=production PRISMA_HIDE_UPDATE_MESSAGE=1
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
