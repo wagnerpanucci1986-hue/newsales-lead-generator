@@ -10,11 +10,14 @@ import { prisma } from './lib/prisma.js';
 import { closeQueues } from './lib/queues.js';
 import { redis } from './lib/redis.js';
 import { HttpError } from './modules/auth/guard.js';
+import { auditRoutes } from './modules/audit/routes.js';
 import { authRoutes } from './modules/auth/routes.js';
+import { automationRoutes } from './modules/automations/routes.js';
 import { blacklistRoutes } from './modules/blacklist/routes.js';
 import { campaignRoutes } from './modules/campaigns/routes.js';
 import { contactRoutes } from './modules/contacts/routes.js';
 import { conversationRoutes } from './modules/conversations/routes.js';
+import { dashboardRoutes } from './modules/dashboard/routes.js';
 import { importRoutes } from './modules/imports/routes.js';
 import { listRoutes } from './modules/lists/routes.js';
 import { mediaRoutes } from './modules/media/routes.js';
@@ -62,6 +65,9 @@ async function main() {
   await app.register(importRoutes, { prefix: '/api/imports' });
   await app.register(campaignRoutes, { prefix: '/api/campaigns' });
   await app.register(settingsRoutes, { prefix: '/api/settings' });
+  await app.register(automationRoutes, { prefix: '/api/automations' });
+  await app.register(dashboardRoutes, { prefix: '/api/dashboard' });
+  await app.register(auditRoutes, { prefix: '/api/audit' });
 
   const io = attachRealtime(app.server);
 

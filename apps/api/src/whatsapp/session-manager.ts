@@ -1,7 +1,8 @@
 import { NumberStatus } from '@prisma/client';
 import { Browsers, DisconnectReason, makeCacheableSignalKeyStore, makeWASocket, type ConnectionState, type WASocket } from 'baileys';
 import { env } from '../config/env.js';
-import { handleInbound, trackCampaignReceipt } from '../campaigns/tracking.js';
+import { processInbound } from '../automation/engine.js';
+import { trackCampaignReceipt } from '../campaigns/tracking.js';
 import { audit } from '../lib/audit.js';
 import { publishEvent, qrCacheKey } from '../lib/events.js';
 import { logger } from '../lib/logger.js';
@@ -114,7 +115,7 @@ export class SessionManager {
       enqueueMedia: async (mediaId) => {
         await mediaQueue.add('download', { mediaId }, { jobId: `media-${mediaId}` });
       },
-      onInbound: handleInbound,
+      onInbound: (ctx) => processInbound(ctx),
       onReceipt: trackCampaignReceipt,
     });
 

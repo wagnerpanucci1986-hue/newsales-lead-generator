@@ -18,6 +18,13 @@ export const settingSchemas = {
     minDeliveryRate: z.number().min(0).max(1).default(0.5),
     deliverySample: z.number().int().min(10).max(200).default(20),
   }),
+  // Horário de atendimento, usado pela resposta automática "fora do horário".
+  businessHours: z.object({
+    timezone: z.string().default('America/Sao_Paulo'),
+    days: z.array(z.number().int().min(0).max(6)).max(7).default([1, 2, 3, 4, 5]),
+    start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('09:00'),
+    end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('18:00'),
+  }),
 } as const;
 
 export type SettingKey = keyof typeof settingSchemas;
