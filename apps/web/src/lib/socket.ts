@@ -8,7 +8,8 @@ let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io(API_URL, {
+    // Sem URL, o Socket.IO conecta na própria origem da página.
+    socket = io(API_URL || undefined, {
       // Função: cada reconexão usa o token atual, não o da primeira conexão.
       auth: (cb) => cb({ token: getAccessToken() }),
       transports: ['websocket', 'polling'],

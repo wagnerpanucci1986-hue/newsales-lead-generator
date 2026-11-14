@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Testes e build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: newsales
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # Valores só para o CI (banco descartável); não são segredos de produção.
+      DATABASE_URL: postgresql://postgres:ci@localhost:5432/newsales?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-jwt-secret-0000000000000000000000000000000000000000
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      STORAGE_LOCAL_PATH: /tmp/media
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Migrations
+        run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+      - name: Typecheck da API
+        run: npm run typecheck -w apps/api
+      - name: Testes de integração
+        run: npm test -w apps/api
+      - name: Build da API
+        run: npm run build -w apps/api
+      - name: Build do painel (inclui typecheck)
+        run: npm run build -w apps/web
+
+  docker:
+    name: Docker Compose (subida completa)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gerar .env
+        run: |
+          ./scripts/setup-env.sh
+          sed -i 's/^ADMIN_EMAIL=.*/ADMIN_EMAIL=ci@exemplo.com.br/; s/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=senha-do-ci-123/' .env
+      - name: Build das imagens
+        run: docker compose build
+      - name: Subir
+        run: docker compose up -d
+      - name: Esperar o painel e a API pelo proxy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://localhost/login \
+              && curl -fsS -o /dev/null -X POST http://localhost/api/auth/login -H 'content-type: application/json' \
+                   -d '{"email":"ci@exemplo.com.br","password":"senha-do-ci-123"}'; then
+              echo "no ar após ~$((i * 5)) s"; exit 0
+            fi
+            sleep 5
+          done
+          echo "não subiu em 5 minutos"; exit 1
+      - name: Conferir API, worker e banco
+        run: |
+          token=$(curl -fsS -X POST http://localhost/api/auth/login -H 'content-type: application/json' \
+            -d '{"email":"ci@exemplo.com.br","password":"senha-do-ci-123"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).accessToken')
+          curl -fsS http://localhost/api/numbers -H "authorization: Bearer $token"; echo
+          docker compose exec -T api node -e "fetch('http://localhost:4000/health').then(r=>r.json()).then(h=>{console.log(h);process.exit(h.ok&&h.worker?0:1)})"
+          # O seed não recria o administrador numa segunda subida.
+          docker compose run --rm migrate | grep -q "Já existe administrador"
+          docker compose ps
+      - name: Backup e restauração
+        run: |
+          ./scripts/backup.sh /tmp/backups
+          dir=$(ls -d /tmp/backups/* | tail -1)
+          ls -la "$dir"
+          ./scripts/restore.sh "$dir" --sim
+          curl -fsS -o /dev/null -X POST http://localhost/api/auth/login -H 'content-type: application/json' \
+            -d '{"email":"ci@exemplo.com.br","password":"senha-do-ci-123"}'
+      - name: Logs (em caso de falha)
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+      - name: Derrubar
+        if: always()
+        run: docker compose down -v

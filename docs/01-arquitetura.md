@@ -161,7 +161,10 @@ O filtro do atendente é aplicado no servidor em toda consulta e na entrada das 
 
 ```
 .
-├── docker-compose.yml            # fase 6: web, api, worker, postgres, redis (+ minio opcional)
+├── docker-compose.yml            # caddy, web, api, worker, migrate, postgres, redis
+├── docker/                       # Dockerfiles (api, web) e Caddyfile
+├── scripts/                      # setup-env.sh, backup.sh, restore.sh
+├── .github/workflows/ci.yml      # testes, build e subida completa do Compose
 ├── .env.example
 ├── package.json                  # npm workspaces
 ├── docs/
@@ -169,8 +172,7 @@ O filtro do atendente é aplicado no servidor em toda consulta e na entrada das 
 │   ├── api/                      # backend — a mesma imagem roda como "api" ou "worker"
 │   │   ├── prisma/
 │   │   │   ├── schema.prisma
-│   │   │   ├── migrations/
-│   │   │   └── seed.ts           # cria o primeiro admin e as configurações padrão
+│   │   │   └── migrations/
 │   │   └── src/
 │   │       ├── server.ts         # entrada da API (Fastify + Socket.IO)
 │   │       ├── worker.ts         # entrada do worker (sessões + filas)
@@ -186,6 +188,7 @@ O filtro do atendente é aplicado no servidor em toda consulta e na entrada das 
 │   │       │   ├── auth/  users/  numbers/  conversations/  messages/
 │   │       │   ├── contacts/  lists/  tags/  blacklist/  imports/
 │   │       │   ├── campaigns/  automations/  dashboard/  settings/  audit/
+│   │       ├── scripts/          # seed.ts: primeiro administrador e redefinição de senha
 │   │       ├── jobs/             # processadores BullMQ (worker)
 │   │       │   ├── session.ts  outbound.ts  media.ts  contacts.ts
 │   │       │   ├── campaign-control.ts  campaign-tick.ts

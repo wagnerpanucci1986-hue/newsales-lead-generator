@@ -47,10 +47,11 @@ async function main() {
     return reply.code(500).send({ error: 'Erro interno' });
   });
 
+  // Saúde para o Docker e para monitoramento. "worker" indica se há um worker com a trava de líder.
   app.get('/health', async () => {
     await prisma.$queryRaw`SELECT 1`;
     await redis.ping();
-    return { ok: true };
+    return { ok: true, worker: (await redis.exists('worker:leader')) === 1 };
   });
 
   await app.register(authRoutes, { prefix: '/api/auth' });

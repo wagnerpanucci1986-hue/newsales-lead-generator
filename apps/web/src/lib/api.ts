@@ -1,7 +1,8 @@
 // Cliente da API. O access token fica só em memória; o refresh token é um cookie
 // httpOnly que o JavaScript não lê. Ao recarregar a página, a sessão é retomada
 // por /auth/refresh.
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+// Vazio = mesma origem (produção, atrás do proxy). Em desenvolvimento vem de apps/web/.env.development.
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 export type Role = 'ADMIN' | 'MANAGER' | 'AGENT';
 export interface User {

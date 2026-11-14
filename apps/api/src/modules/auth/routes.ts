@@ -35,7 +35,9 @@ async function issueSession(user: User, req: FastifyRequest, reply: FastifyReply
       expiresAt: new Date(Date.now() + REFRESH_TTL_S * 1000),
     },
   });
-  reply.setCookie(REFRESH_COOKIE, refresh, { httpOnly: true, sameSite: 'lax', secure: env.COOKIE_SECURE, path: '/api/auth', maxAge: REFRESH_TTL_S });
+  // Seguro sempre que a requisição chegou por HTTPS (atrás do proxy, via X-Forwarded-Proto) ou se forçado no .env.
+  const secure = env.COOKIE_SECURE || req.protocol === 'https';
+  reply.setCookie(REFRESH_COOKIE, refresh, { httpOnly: true, sameSite: 'lax', secure, path: '/api/auth', maxAge: REFRESH_TTL_S });
   return { accessToken: signAccessToken({ sub: user.id, role: user.role }), expiresIn: ACCESS_TTL_S, user: publicUser(user) };
 }
 
