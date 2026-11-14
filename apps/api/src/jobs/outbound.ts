@@ -9,7 +9,10 @@ export function createOutboundWorker(sessions: SocketProvider): Worker<OutboundJ
   const worker = new Worker<OutboundJob>(
     QUEUE_OUTBOUND,
     async (job) => {
-      if (job.data.kind === 'send') return sendPendingMessage(sessions, job.data.messageId);
+      if (job.data.kind === 'send') {
+        await sendPendingMessage(sessions, job.data.messageId);
+        return;
+      }
       return sendReadReceipts(sessions, job.data.conversationId);
     },
     // A ordem por número é garantida dentro do sender; aqui números diferentes andam em paralelo.

@@ -13,6 +13,9 @@ export interface SendSocket {
   user?: { id: string } | null;
   sendMessage(jid: string, content: AnyMessageContent, options?: { messageId?: string }): Promise<WAMessage | undefined>;
   readMessages(keys: WAMessageKey[]): Promise<void>;
+  onWhatsApp(...phones: string[]): Promise<{ jid: string; exists: boolean }[] | undefined>;
+  presenceSubscribe(jid: string): Promise<void>;
+  sendPresenceUpdate(type: 'composing' | 'paused' | 'available' | 'unavailable', jid?: string): Promise<void>;
 }
 
 export interface SocketProvider {
@@ -45,17 +48,35 @@ async function fail(messageId: string, numberId: string, conversationId: string,
  * envio: assim o eco que volta pelo espelhamento encontra a linha existente em
  * vez de criar uma duplicata com origem "celular".
  */
-export async function sendPendingMessage(sessions: SocketProvider, messageId: string): Promise<void> {
+export interface SendOptions {
+  /** Mostra "digitando…" ao contato antes de enviar, por um tempo proporcional ao texto. */
+  simulateTyping?: boolean;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Tempo de "digitando…": ~50 ms por caractere, entre 2 e 8 segundos, com variação. */
+export function typingDelayMs(text: string | null, random: () => number = Math.random): number {
+  const base = Math.min(8_000, Math.max(2_000, (text?.length ?? 0) * 50));
+  return Math.round(base * (0.8 + random() * 0.4));
+}
+
+/** Devolve true se a mensagem foi aceita pelo WhatsApp. */
+export async function sendPendingMessage(sessions: SocketProvider, messageId: string, opts: SendOptions = {}): Promise<boolean> {
   const msg = await prisma.message.findUnique({
     where: { id: messageId },
     include: { media: true, conversation: { select: { remoteJid: true } } },
   });
-  if (!msg || msg.status !== MessageStatus.PENDING) return; // já processada
+  if (!msg || msg.status !== MessageStatus.PENDING) return false; // já processada
 
   const sock = sessions.getSocket(msg.numberId);
-  if (!sock?.user) return fail(msg.id, msg.numberId, msg.conversationId, 'Número desconectado');
+  if (!sock?.user) {
+    await fail(msg.id, msg.numberId, msg.conversationId, 'Número desconectado');
+    return false;
+  }
 
-  await withNumberLock(msg.numberId, async () => {
+  return withNumberLock(msg.numberId, async () => {
     try {
       let content: AnyMessageContent;
       if (msg.type === MessageType.TEXT) {
@@ -79,6 +100,15 @@ export async function sendPendingMessage(sessions: SocketProvider, messageId: st
           default:
             content = { document: buffer, mimetype, fileName: msg.media.fileName ?? 'arquivo', caption };
         }
+      }
+
+      if (opts.simulateTyping) {
+        const jid = msg.conversation.remoteJid;
+        // Melhor esforço: falha na presença não impede o envio.
+        await sock.presenceSubscribe(jid).catch(() => undefined);
+        await sock.sendPresenceUpdate('composing', jid).catch(() => undefined);
+        await (opts.sleep ?? defaultSleep)(typingDelayMs(msg.text));
+        await sock.sendPresenceUpdate('paused', jid).catch(() => undefined);
       }
 
       const waMessageId = generateMessageIDV2(sock.user!.id);
@@ -105,9 +135,11 @@ export async function sendPendingMessage(sessions: SocketProvider, messageId: st
           payload: { conversationId: msg.conversationId, messageId: msg.id, status: MessageStatus.SENT },
         });
       }
+      return true;
     } catch (err) {
       logger.error({ err, messageId: msg.id }, 'falha no envio');
       await fail(msg.id, msg.numberId, msg.conversationId, err instanceof Error ? err.message : 'Falha no envio');
+      return false;
     }
   });
 }

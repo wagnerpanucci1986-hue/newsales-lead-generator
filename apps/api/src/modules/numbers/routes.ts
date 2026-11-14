@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { env } from '../../config/env.js';
 import { audit } from '../../lib/audit.js';
-import { qrCacheKey } from '../../lib/events.js';
+import { publishEvent, qrCacheKey } from '../../lib/events.js';
 import { prisma } from '../../lib/prisma.js';
 import { sessionQueue } from '../../lib/queues.js';
 import { redis } from '../../lib/redis.js';
@@ -97,6 +97,21 @@ export async function numberRoutes(app: FastifyInstance) {
     await sessionQueue.add('logout', { action: 'logout', numberId: id });
     await audit({ userId: req.user.id, action: 'number.logout', entity: 'WaNumber', entityId: id, ip: req.ip });
     return reply.code(202).send({ ok: true });
+  });
+
+  // Libera um número pausado automaticamente (falhas em sequência ou queda de entrega).
+  app.post('/:id/resume', { preHandler: managers }, async (req) => {
+    const { id } = idParams.parse(req.params);
+    const current = await findNumber(id);
+    if (current.status !== NumberStatus.SUSPECT) throw new HttpError(409, 'Este número não está pausado');
+    // SUSPECT só existe com o socket aberto, então voltar para CONNECTED é seguro.
+    const number = await prisma.waNumber.update({
+      where: { id },
+      data: { status: NumberStatus.CONNECTED, pauseReason: null, statusReason: null, consecutiveFailures: 0, resumedAt: new Date(), nextSendAt: null },
+    });
+    await publishEvent({ type: 'number.status', numberId: id, payload: { status: number.status, phone: number.phone, reason: null } });
+    await audit({ userId: req.user.id, action: 'number.resume', entity: 'WaNumber', entityId: id, meta: { previousReason: current.pauseReason }, ip: req.ip });
+    return { number };
   });
 
   // Remoção lógica: o histórico de conversas fica; a vaga no limite de 10 é liberada.

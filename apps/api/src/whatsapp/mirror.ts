@@ -18,6 +18,10 @@ export interface MirrorDeps {
   enqueueMedia(mediaId: string): Promise<void>;
   /** Origem de uma mensagem enviada pelo próprio sistema (painel, campanha, automação). */
   ownSource?(waMessageId: string): MessageSource | undefined;
+  /** Mensagem recebida ao vivo em conversa individual (resposta de campanha, descadastro, automação). */
+  onInbound?(ctx: { numberId: string; conversationId: string; text: string | null; timestamp: Date }): Promise<unknown>;
+  /** Recibo de entrega/leitura aplicado a uma mensagem enviada. */
+  onReceipt?(messageId: string, status: MessageStatus): Promise<unknown>;
 }
 
 
@@ -273,6 +277,12 @@ export class Mirror {
     if (!history) {
       await publishEvent({ type: 'message.new', numberId: this.numberId, payload: { conversationId, messageId: created.id } });
     }
+
+    if (!history && !fromMe && !group && parsed.type !== MessageType.REACTION) {
+      await this.deps
+        .onInbound?.({ numberId: this.numberId, conversationId, text: parsed.text, timestamp })
+        ?.catch((err) => this.log.error({ err, conversationId }, 'falha ao tratar mensagem recebida'));
+    }
   }
 
   /** Avança o status de uma mensagem enviada. Nunca regride (recibos chegam fora de ordem). */
@@ -302,6 +312,7 @@ export class Mirror {
     if (delivered && !before.deliveredAt) await this.bumpStat('delivered');
     if (read && !before.readAt) await this.bumpStat('read');
     if (status === MessageStatus.FAILED) await this.bumpStat('failed');
+    await this.deps.onReceipt?.(before.id, status)?.catch((err) => this.log.error({ err }, 'falha ao registrar recibo de campanha'));
     await publishEvent({
       type: 'message.status',
       numberId: this.numberId,

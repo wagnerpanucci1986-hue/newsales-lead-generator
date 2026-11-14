@@ -5,6 +5,8 @@ import { bullConnection } from './redis.js';
 export const QUEUE_SESSION = 'session';
 export const QUEUE_MEDIA = 'media';
 export const QUEUE_OUTBOUND = 'outbound';
+export const QUEUE_CONTACTS = 'contacts';
+export const QUEUE_CAMPAIGN = 'campaign-control';
 
 export type SessionJob = { action: 'connect' | 'disconnect' | 'logout' | 'remove'; numberId: string };
 export type MediaJob = { mediaId: string };
@@ -34,3 +36,26 @@ export const outboundQueue = new Queue<OutboundJob>(QUEUE_OUTBOUND, {
   connection,
   defaultJobOptions: { removeOnComplete: 500, removeOnFail: 1000, attempts: 1 },
 });
+
+export type ContactsJob =
+  | { kind: 'import'; importId: string }
+  // Verifica no WhatsApp os contatos ainda não checados (de uma lista, de uma importação ou todos).
+  | { kind: 'verify'; numberId: string; listId?: string; contactIds?: string[] };
+
+export const contactsQueue = new Queue<ContactsJob>(QUEUE_CONTACTS, {
+  connection,
+  defaultJobOptions: { removeOnComplete: 100, removeOnFail: 500, attempts: 1 },
+});
+
+/** Monta os destinatários e coloca a campanha em andamento. */
+export type CampaignJob = { kind: 'start'; campaignId: string };
+
+export const campaignQueue = new Queue<CampaignJob>(QUEUE_CAMPAIGN, {
+  connection,
+  defaultJobOptions: { removeOnComplete: 100, removeOnFail: 500, attempts: 1 },
+});
+
+/** Fecha as conexões de todas as filas (encerramento da API e testes). */
+export async function closeQueues(): Promise<void> {
+  await Promise.allSettled([sessionQueue, mediaQueue, outboundQueue, contactsQueue, campaignQueue].map((q) => q.close()));
+}

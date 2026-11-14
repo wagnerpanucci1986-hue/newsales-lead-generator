@@ -7,14 +7,21 @@ import { ZodError } from 'zod';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
+import { closeQueues } from './lib/queues.js';
 import { redis } from './lib/redis.js';
 import { HttpError } from './modules/auth/guard.js';
 import { authRoutes } from './modules/auth/routes.js';
+import { blacklistRoutes } from './modules/blacklist/routes.js';
+import { campaignRoutes } from './modules/campaigns/routes.js';
+import { contactRoutes } from './modules/contacts/routes.js';
 import { conversationRoutes } from './modules/conversations/routes.js';
+import { importRoutes } from './modules/imports/routes.js';
+import { listRoutes } from './modules/lists/routes.js';
 import { mediaRoutes } from './modules/media/routes.js';
 import { tagRoutes } from './modules/tags/routes.js';
 import { userRoutes } from './modules/users/routes.js';
 import { numberRoutes } from './modules/numbers/routes.js';
+import { settingsRoutes } from './modules/settings/routes.js';
 import { attachRealtime } from './realtime/socket.js';
 
 async function main() {
@@ -49,6 +56,12 @@ async function main() {
   await app.register(mediaRoutes, { prefix: '/api/media' });
   await app.register(tagRoutes, { prefix: '/api/tags' });
   await app.register(userRoutes, { prefix: '/api/users' });
+  await app.register(contactRoutes, { prefix: '/api/contacts' });
+  await app.register(listRoutes, { prefix: '/api/lists' });
+  await app.register(blacklistRoutes, { prefix: '/api/blacklist' });
+  await app.register(importRoutes, { prefix: '/api/imports' });
+  await app.register(campaignRoutes, { prefix: '/api/campaigns' });
+  await app.register(settingsRoutes, { prefix: '/api/settings' });
 
   const io = attachRealtime(app.server);
 
@@ -56,6 +69,7 @@ async function main() {
     logger.info({ signal }, 'encerrando API');
     await io.close();
     await app.close();
+    await closeQueues();
     await prisma.$disconnect();
     process.exit(0);
   };

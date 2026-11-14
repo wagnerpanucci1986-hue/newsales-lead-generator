@@ -35,7 +35,8 @@ export function attachRealtime(httpServer: HttpServer): Server {
   sub.on('message', (_channel, raw) => {
     try {
       const event = JSON.parse(raw) as AppEvent;
-      io.to([ROOM_ALL, roomOf(event.numberId)]).emit(event.type, { numberId: event.numberId, ...event.payload });
+      const rooms = event.numberId ? [ROOM_ALL, roomOf(event.numberId)] : [ROOM_ALL];
+      io.to(rooms).emit(event.type, { numberId: event.numberId, ...event.payload });
     } catch (err) {
       logger.warn({ err }, 'evento inválido no canal');
     }

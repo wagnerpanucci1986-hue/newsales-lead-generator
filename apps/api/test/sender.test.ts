@@ -34,6 +34,11 @@ function fakeSocket(opts: { fail?: boolean } = {}) {
     async readMessages(keys) {
       read.push(...keys);
     },
+    async onWhatsApp(...phones) {
+      return phones.map((p) => ({ jid: `${p}@s.whatsapp.net`, exists: true }));
+    },
+    async presenceSubscribe() {},
+    async sendPresenceUpdate() {},
   };
   return { sock, sent, read };
 }

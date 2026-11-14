@@ -8,6 +8,7 @@ import { audit } from '../../lib/audit.js';
 import { sha256 } from '../../lib/crypto.js';
 import { publishEvent } from '../../lib/events.js';
 import { prisma } from '../../lib/prisma.js';
+import { MEDIA_PREVIEW_LABEL, messageTypeForMime } from '../../lib/media-type.js';
 import { outboundQueue } from '../../lib/queues.js';
 import { storage } from '../../lib/storage/index.js';
 import { accessibleNumberIds, authenticate, HttpError } from '../auth/guard.js';
@@ -48,15 +49,6 @@ async function findConversation(user: User, id: string) {
   if (!conv) throw new HttpError(404, 'Conversa não encontrada');
   return conv;
 }
-
-function mediaTypeOf(mime: string): MessageType {
-  if (['image/jpeg', 'image/png', 'image/webp'].includes(mime)) return MessageType.IMAGE;
-  if (mime === 'video/mp4') return MessageType.VIDEO;
-  if (mime.startsWith('audio/')) return MessageType.AUDIO;
-  return MessageType.DOCUMENT;
-}
-
-const PREVIEW_LABEL: Partial<Record<MessageType, string>> = { IMAGE: '📷 Imagem', VIDEO: '🎥 Vídeo', AUDIO: '🎤 Áudio', DOCUMENT: '📄 Documento' };
 
 export async function conversationRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
@@ -152,7 +144,7 @@ export async function conversationRoutes(app: FastifyInstance) {
   app.post('/:id/messages', async (req, reply) => {
     const { id } = idParams.parse(req.params);
     const conv = await findConversation(req.user, id);
-    if (conv.number.status !== 'CONNECTED') throw new HttpError(409, 'O número desta conversa está desconectado.');
+    if (conv.number.status !== 'CONNECTED' && conv.number.status !== 'SUSPECT') throw new HttpError(409, 'O número desta conversa está desconectado.');
 
     let text: string | null = null;
     let type: MessageType = MessageType.TEXT;
@@ -166,7 +158,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       const caption = (file.fields.text as { value?: string } | undefined)?.value?.trim();
       text = caption ? caption.slice(0, 4096) : null;
       const mimeType = file.mimetype || 'application/octet-stream';
-      type = mediaTypeOf(mimeType);
+      type = messageTypeForMime(mimeType);
       const fileName = path.basename(file.filename || 'arquivo').slice(0, 200);
       const ext = path.extname(fileName).replace(/[^.a-zA-Z0-9]/g, '').slice(0, 9);
       const storageKey = `${conv.number.id}/enviados/${new Date().toISOString().slice(0, 7)}/${randomUUID()}${ext}`;
@@ -200,7 +192,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       where: { id },
       data: {
         lastMessageAt: now,
-        lastMessagePreview: [PREVIEW_LABEL[type], text].filter(Boolean).join(': ').replace(/\s+/g, ' ').slice(0, 200),
+        lastMessagePreview: [MEDIA_PREVIEW_LABEL[type], text].filter(Boolean).join(': ').replace(/\s+/g, ' ').slice(0, 200),
         lastMessageFromMe: true,
         unreadCount: 0,
         automationPausedAt: conv.automationPausedAt ?? now,

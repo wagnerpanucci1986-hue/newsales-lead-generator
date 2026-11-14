@@ -115,8 +115,9 @@ model WaNumber {
   warmupStartedAt     DateTime? // início da rampa; null = começa no 1º envio
   campaignEnabled     Boolean   @default(true) // false = só atendimento
   consecutiveFailures Int       @default(0)
-  pausedUntil         DateTime? // pausa automática temporária
-  pauseReason         String?
+  nextSendAt          DateTime? // próximo disparo de campanha permitido (ritmo anti-banimento)
+  resumedAt           DateTime? // liberado por um gestor após pausa automática; a checagem de qualidade ignora envios anteriores
+  pauseReason         String? // preenchido quando o número foi pausado automaticamente (status SUSPECT)
 
   statusReason       String? // explicação do status atual, mostrada no painel
   lastConnectedAt    DateTime?
@@ -533,15 +534,8 @@ model Campaign {
   // LGPD: quem criou declarou que a base tem consentimento. Obrigatório para iniciar.
   consentConfirmed Boolean @default(false)
 
-  // Contadores desnormalizados para o relatório (atualizados pelo worker).
+  // Os números do relatório são sempre contados em CampaignRecipient (fonte única).
   totalRecipients Int @default(0)
-  sentCount       Int @default(0)
-  deliveredCount  Int @default(0)
-  readCount       Int @default(0)
-  repliedCount    Int @default(0)
-  failedCount     Int @default(0)
-  skippedCount    Int @default(0)
-  optOutCount     Int @default(0)
 
   createdById String?
   startedAt   DateTime?

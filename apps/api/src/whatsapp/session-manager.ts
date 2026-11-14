@@ -1,6 +1,7 @@
 import { NumberStatus } from '@prisma/client';
 import { Browsers, DisconnectReason, makeCacheableSignalKeyStore, makeWASocket, type ConnectionState, type WASocket } from 'baileys';
 import { env } from '../config/env.js';
+import { handleInbound, trackCampaignReceipt } from '../campaigns/tracking.js';
 import { audit } from '../lib/audit.js';
 import { publishEvent, qrCacheKey } from '../lib/events.js';
 import { logger } from '../lib/logger.js';
@@ -113,6 +114,8 @@ export class SessionManager {
       enqueueMedia: async (mediaId) => {
         await mediaQueue.add('download', { mediaId }, { jobId: `media-${mediaId}` });
       },
+      onInbound: handleInbound,
+      onReceipt: trackCampaignReceipt,
     });
 
     const session: Session = { numberId, sock, mirror, qrAttempts: 0, closing: false };
@@ -233,7 +236,10 @@ export class SessionManager {
         where: { id: numberId },
         data: { phone, jid, lid: normalizeJid(sock.user?.lid), autoConnect: true, lastConnectedAt: new Date(), lastDisconnectCode: null },
       });
-      await this.setStatus(numberId, NumberStatus.CONNECTED);
+      // Pausado por falhas/qualidade: reconecta para atender, mas segue sem disparar até um gestor liberar.
+      const paused = await prisma.waNumber.findUnique({ where: { id: numberId }, select: { pauseReason: true } });
+      if (paused?.pauseReason) await this.setStatus(numberId, NumberStatus.SUSPECT, { reason: paused.pauseReason });
+      else await this.setStatus(numberId, NumberStatus.CONNECTED);
       log.info({ phone }, 'número conectado');
     }
 

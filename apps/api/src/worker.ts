@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { CampaignDispatcher } from './campaigns/dispatcher.js';
+import { createCampaignWorker } from './jobs/campaign.js';
+import { createContactsWorker } from './jobs/contacts.js';
 import { createMediaWorker } from './jobs/media.js';
 import { createOutboundWorker } from './jobs/outbound.js';
 import { createSessionWorker } from './jobs/session.js';
@@ -34,7 +37,8 @@ async function main() {
   logger.info({ instanceId }, 'worker iniciado');
 
   const sessions = new SessionManager();
-  const workers = [createSessionWorker(sessions), createMediaWorker(sessions), createOutboundWorker(sessions)];
+  const workers = [createSessionWorker(sessions), createMediaWorker(sessions), createOutboundWorker(sessions), createContactsWorker(sessions), createCampaignWorker()];
+  const dispatcher = new CampaignDispatcher(sessions);
 
   let stopping = false;
   const shutdown = async (signal: string, code = 0) => {
@@ -42,6 +46,7 @@ async function main() {
     stopping = true;
     logger.info({ signal }, 'encerrando worker');
     clearInterval(renew);
+    dispatcher.stop();
     await Promise.allSettled(workers.map((w) => w.close()));
     await sessions.shutdown();
     await redis.eval(RELEASE_SCRIPT, 1, LOCK_KEY, instanceId).catch(() => undefined);
@@ -63,6 +68,7 @@ async function main() {
   process.on('SIGINT', () => void shutdown('SIGINT'));
 
   await sessions.boot();
+  dispatcher.start();
 }
 
 // Erros soltos de bibliotecas não podem derrubar todas as sessões.
