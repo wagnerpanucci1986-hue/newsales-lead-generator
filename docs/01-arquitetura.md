@@ -60,8 +60,7 @@ flowchart LR
 |---|---|---|
 | `session` | API | `connect`, `disconnect`, `logout`, `delete` de um número |
 | `outbound` | API, automação | Envio avulso (resposta do painel, resposta automática). Concorrência 1 por número. |
-| `campaign-tick` | worker (auto-reagendado) | Um "tique" por número: pega o próximo destinatário, envia, agenda o próximo tique com atraso aleatório |
-| `campaign-control` | API, agendador | Iniciar, pausar, retomar, cancelar; montar a lista de destinatários |
+| `campaign-control` | API, agendador | Montar a lista de destinatários e colocar a campanha em andamento |
 | `media` | worker | Download e gravação das mídias recebidas |
 | `contacts` | API | Importação CSV/Excel e verificação `onWhatsApp` em lotes |
 
@@ -83,7 +82,7 @@ flowchart LR
 - Mídia: a mensagem é gravada na hora com `Media.status = PENDING`; o download roda na fila `media` e o painel é avisado quando termina.
 
 ### 3.3 Disparo (campanha)
-A fila durável é a tabela `CampaignRecipient`; o BullMQ só carrega os tiques com atraso.
+A fila durável é a tabela `CampaignRecipient`. O ritmo de cada número fica gravado em `WaNumber.nextSendAt`, e um laço no worker (a cada 2 s) dispara o próximo envio dos números cujo horário chegou. Na fase 4 isso substituiu a ideia inicial de um job BullMQ por tique: o estado no banco sobrevive a reinícios sem depender do Redis.
 
 1. Ao iniciar, o worker resolve o público (listas + filtro), remove blacklist, opt-outs e números sem WhatsApp, e grava os destinatários como `QUEUED`.
 2. Cada número participante tem um tique próprio. A cada tique o número:

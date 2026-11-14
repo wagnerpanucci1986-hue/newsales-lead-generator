@@ -137,7 +137,7 @@ export function ChatPane({
   if (error && !conversation) return <p role="alert" className="m-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>;
   if (!conversation) return <p className="p-6 text-sm text-slate-500">Abrindo conversa…</p>;
 
-  const disabledReason = conversation.number.status !== 'CONNECTED' ? `O número “${conversation.number.nickname}” está desconectado. Reconecte-o em Números para responder.` : null;
+  const disabledReason = conversation.number.status !== 'CONNECTED' && conversation.number.status !== 'SUSPECT' ? `O número “${conversation.number.nickname}” está desconectado. Reconecte-o em Números para responder.` : null;
 
   let lastDay = '';
   return (

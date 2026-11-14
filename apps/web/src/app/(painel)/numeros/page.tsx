@@ -38,7 +38,8 @@ export default function NumbersPage() {
     setNumbers((list) => list?.map((n) => (n.id === e.numberId ? { ...n, status: e.status, phone: e.phone ?? n.phone, statusReason: e.reason } : n)) ?? list);
   });
 
-  async function act(number: WaNumber, action: 'connect' | 'disconnect' | 'logout' | 'delete') {
+  async function act(number: WaNumber, action: 'connect' | 'disconnect' | 'logout' | 'delete' | 'resume') {
+    if (action === 'resume' && !window.confirm(`Liberar “${number.nickname}” para disparar de novo? Confira antes o motivo da pausa; insistir com um número em risco pode levar ao banimento.`)) return;
     const confirmText = {
       logout: `Desvincular “${number.nickname}” do WhatsApp? Será preciso ler o QR Code de novo para reconectar.`,
       delete: `Remover “${number.nickname}”? O aparelho será desvinculado. As conversas já espelhadas são mantidas.`,
@@ -100,7 +101,7 @@ export default function NumbersPage() {
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {numbers?.map((n) => {
           const info = STATUS_INFO[n.status];
-          const live = n.status === 'CONNECTED' || n.status === 'CONNECTING' || n.status === 'QR_PENDING';
+          const live = n.status === 'CONNECTED' || n.status === 'CONNECTING' || n.status === 'QR_PENDING' || n.status === 'SUSPECT';
           return (
             <li key={n.id} className="card flex flex-col overflow-hidden">
               <div className="h-1.5" style={{ backgroundColor: n.color }} />
@@ -135,6 +136,7 @@ export default function NumbersPage() {
                     ) : !live ? (
                       <button className="btn btn-primary" disabled={busy === n.id} onClick={() => act(n, 'connect')}>Conectar</button>
                     ) : null}
+                    {n.status === 'SUSPECT' && <button className="btn btn-primary" disabled={busy === n.id} onClick={() => act(n, 'resume')}>Liberar disparos</button>}
                     {live && <button className="btn btn-secondary" disabled={busy === n.id} onClick={() => act(n, 'disconnect')}>Desconectar</button>}
                     <button className="btn btn-secondary" onClick={() => setDialog({ kind: 'edit', id: n.id })}>Editar</button>
                     {n.phone && <button className="btn btn-secondary" disabled={busy === n.id} onClick={() => act(n, 'logout')}>Desvincular</button>}

@@ -11,7 +11,7 @@ Painel self-hosted de disparo e atendimento via WhatsApp: até 10 números conec
 | 1 | Arquitetura, modelo de dados, estrutura de pastas | concluída — [docs/01-arquitetura.md](docs/01-arquitetura.md) |
 | 2 | Sessões múltiplas, QR Code, espelhamento | concluída — [docs/02-sessoes-e-espelhamento.md](docs/02-sessoes-e-espelhamento.md) |
 | 3 | Caixa de entrada unificada | concluída — [docs/03-caixa-de-entrada.md](docs/03-caixa-de-entrada.md) |
-| 4 | Contatos, listas, campanhas, anti-banimento | pendente |
+| 4 | Contatos, listas, campanhas, anti-banimento | concluída — [docs/04-contatos-e-campanhas.md](docs/04-contatos-e-campanhas.md) |
 | 5 | Automações, usuários, dashboard | pendente |
 | 6 | Docker Compose, instalação, operação | pendente |
 
