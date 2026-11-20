@@ -7,6 +7,7 @@ import { WEEKDAYS, type Campaign, type ContactList } from '@/lib/crm';
 import { formatSize, type Tag } from '@/lib/inbox';
 import type { WaNumber } from '@/lib/numbers';
 import { LgpdNotice } from './LgpdNotice';
+import { VariationsPanel } from '../sdr/VariationsPanel';
 
 interface Preview {
   audience: { total: number; willSend: number; skipped: Record<string, number> };
@@ -44,6 +45,8 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
     simulateTyping: campaign?.simulateTyping ?? true,
     consentConfirmed: campaign?.consentConfirmed ?? false,
     legalBasis: (campaign?.legalBasis ?? '') as '' | 'CONSENT' | 'LEGITIMATE_INTEREST',
+    sdrEnabled: campaign?.sdrEnabled ?? false,
+    variants: campaign?.variants ?? [],
   });
   const [file, setFile] = useState<File | null>(null);
   const [removeMedia, setRemoveMedia] = useState(false);
@@ -170,6 +173,14 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
             )}
           </div>
         </div>
+        <VariationsPanel body={form.body} variants={form.variants} onChange={(v) => set('variants', v)} />
+        <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 text-sm">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-600" checked={form.sdrEnabled} onChange={(e) => set('sdrEnabled', e.target.checked)} />
+          <span>
+            <span className="font-medium">Atendimento pela IA do SDR</span>
+            <span className="block text-slate-500">Quem responder é atendido pela IA: qualifica, agenda a reunião com o consultor e faz os follow-ups. Um atendente pode assumir a qualquer momento pela conversa. Configure em SDR (IA).</span>
+          </span>
+        </label>
       </section>
 
       <section className="card space-y-4 p-5">

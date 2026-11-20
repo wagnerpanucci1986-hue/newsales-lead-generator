@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { formatDay, type Conversation, type Message, type Tag } from '@/lib/inbox';
 import { useSocketEvent } from '@/lib/socket';
 import { ChatHeader, type Assignable } from './ChatHeader';
+import { SdrBar } from './SdrBar';
 import { Composer } from './Composer';
 import { MessageBubble } from './MessageBubble';
 
@@ -143,6 +144,7 @@ export function ChatPane({
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label={`Conversa com ${conversation.name}`}>
       <ChatHeader conversation={conversation} users={users} tags={tags} onChange={applyConversation} onBack={onBack} onTagsChanged={onTagsChanged} />
+      <SdrBar conversation={conversation} />
       <div ref={scroller} className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-slate-100 px-3 py-4 sm:px-6">
         {hasMore && (
           <div className="text-center">

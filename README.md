@@ -12,6 +12,7 @@ Painel self-hosted de disparo e atendimento via WhatsApp: até 10 números conec
 | [docs/06-operacao.md](docs/06-operacao.md) | Boas práticas de uso, backup, atualização, monitoramento e solução de problemas |
 | [docs/07-captacao-cnpj.md](docs/07-captacao-cnpj.md) | Captação de empresas pela base pública de CNPJ da Receita Federal |
 | [docs/08-captacao-instagram.md](docs/08-captacao-instagram.md) | Captação de perfis comerciais do Instagram pela API oficial da Meta |
+| [docs/09-ia-sdr.md](docs/09-ia-sdr.md) | IA do SDR: atendimento, qualificação, agenda e follow-ups pelo Claude |
 | [docs/01-arquitetura.md](docs/01-arquitetura.md) | Arquitetura, modelo de dados, estrutura de pastas |
 | [docs/02](docs/02-sessoes-e-espelhamento.md) a [docs/05](docs/05-automacoes-usuarios-dashboard.md) | O que cada fase entregou, como foi verificado e limitações |
 

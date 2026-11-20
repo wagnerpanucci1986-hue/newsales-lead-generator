@@ -86,6 +86,8 @@ export interface Campaign {
   simulateTyping: boolean;
   consentConfirmed: boolean;
   legalBasis: 'CONSENT' | 'LEGITIMATE_INTEREST' | null;
+  sdrEnabled: boolean;
+  variants: string[];
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;

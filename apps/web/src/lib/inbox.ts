@@ -20,6 +20,7 @@ export interface Conversation {
   lastMessagePreview: string | null;
   lastMessageFromMe: boolean;
   automationPaused: boolean;
+  aiStatus: 'OFF' | 'ACTIVE' | 'DONE';
   number: { id: string; nickname: string; color: string; phone: string | null; status: string };
   contact: { id: string; name: string | null; phone: string; pushName: string | null; company: string | null; optedOutAt: string | null } | null;
   assignee: { id: string; name: string } | null;
@@ -30,7 +31,7 @@ export interface Message {
   id: string;
   conversationId: string;
   fromMe: boolean;
-  source: 'INBOUND' | 'PANEL' | 'PHONE' | 'CAMPAIGN' | 'AUTOMATION';
+  source: 'INBOUND' | 'PANEL' | 'PHONE' | 'CAMPAIGN' | 'AUTOMATION' | 'AI';
   type: MessageType;
   status: MessageStatus;
   text: string | null;

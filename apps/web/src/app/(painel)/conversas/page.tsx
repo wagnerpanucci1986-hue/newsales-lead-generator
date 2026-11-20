@@ -36,6 +36,11 @@ export default function InboxPage() {
   const [users, setUsers] = useState<Assignable[]>([]);
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
+  // Link direto para uma conversa (?c=id), vindo por exemplo da lista de leads do SDR.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('c');
+    if (id) setSelectedId(id);
+  }, []);
 
   const loadTags = useCallback(() => api<{ tags: Tag[] }>('/tags').then((r) => setTags(r.tags)).catch(() => undefined), []);
 

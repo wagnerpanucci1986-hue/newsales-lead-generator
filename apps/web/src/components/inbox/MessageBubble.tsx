@@ -2,7 +2,7 @@
 
 import { formatSize, formatTime, mediaUrl, TYPE_LABEL, type Message } from '@/lib/inbox';
 
-const SOURCE_LABEL: Partial<Record<Message['source'], string>> = { PHONE: 'pelo celular', CAMPAIGN: 'campanha', AUTOMATION: 'automático' };
+const SOURCE_LABEL: Partial<Record<Message['source'], string>> = { PHONE: 'pelo celular', CAMPAIGN: 'campanha', AUTOMATION: 'automático', AI: 'IA do SDR' };
 
 /** Tiques do WhatsApp: 1 = enviada, 2 = entregue, 2 azuis = lida. */
 function Ticks({ status }: { status: Message['status'] }) {
