@@ -44,6 +44,8 @@ const schema = z.object({
   // Versão da Graph API da Meta usada na pesquisa de perfis do Instagram.
   // IA do SDR (API da Anthropic). Sem chave, a IA fica desligada.
   ANTHROPIC_API_KEY: z.string().optional(),
+  // Só para chaves sem workspace (a API pede o cabeçalho anthropic-workspace-id): ID wrkspc_… do Console.
+  ANTHROPIC_WORKSPACE_ID: z.string().optional(),
   META_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default('v24.0'),
   BAILEYS_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('warn'),
 

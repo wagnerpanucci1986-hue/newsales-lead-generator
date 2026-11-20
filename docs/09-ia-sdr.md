@@ -37,6 +37,8 @@ A IA atende quem responde às campanhas marcadas com **Atendimento pela IA do SD
 2. No arquivo `.env` (na pasta do sistema), preencha `ANTHROPIC_API_KEY=sk-ant-...`.
 3. Rode `docker compose up -d` para reiniciar com a chave.
 
+Se a tela de teste mostrar *"This API key is not scoped to a workspace"*, a chave foi criada fora de um workspace. Crie outra dentro de um workspace (Console → Settings → Workspaces → o workspace → API Keys) ou informe o workspace no `.env` com `ANTHROPIC_WORKSPACE_ID=wrkspc_...`.
+
 O modelo padrão é o Claude Opus 5.5, com raciocínio de profundidade média. A persona e a base de conhecimento ficam em cache, o que barateia as chamadas seguidas. Se o modelo recusar responder, a API tenta outro modelo automaticamente; se todos recusarem, a conversa passa para uma pessoa.
 
 ### 2. Google Agenda

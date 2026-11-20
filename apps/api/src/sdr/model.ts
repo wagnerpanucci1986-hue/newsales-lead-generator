@@ -17,7 +17,12 @@ export const hasApiKey = () => Boolean(override || env.ANTHROPIC_API_KEY);
 export const createMessage: CreateMessage = (params) => {
   if (override) return override(params);
   if (!env.ANTHROPIC_API_KEY) throw new Error('Chave da API da Anthropic não configurada (ANTHROPIC_API_KEY no .env).');
-  client ??= new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 2, timeout: 120_000 });
+  client ??= new Anthropic({
+    apiKey: env.ANTHROPIC_API_KEY,
+    maxRetries: 2,
+    timeout: 120_000,
+    defaultHeaders: env.ANTHROPIC_WORKSPACE_ID ? { 'anthropic-workspace-id': env.ANTHROPIC_WORKSPACE_ID } : undefined,
+  });
   return client.beta.messages.create(params);
 };
 
