@@ -26,6 +26,34 @@ Internet ──▶ caddy (80/443, HTTPS automático)
 
 Só o Caddy expõe portas. Banco, Redis, API e worker ficam na rede interna do Docker.
 
+## Testar no seu computador (Windows ou Mac)
+
+Para conhecer o sistema e parear um chip de teste antes de alugar um servidor. Funciona só enquanto o computador está ligado; não serve para operar de verdade.
+
+1. Instale o **[Docker Desktop](https://www.docker.com/products/docker-desktop/)**, abra-o e espere aparecer *Engine running*. No Windows, aceite a instalação do WSL 2 se ele pedir e reinicie.
+2. Baixe o código: no GitHub, abra a branch do sistema, clique em **Code > Download ZIP** e extraia (por exemplo, em `C:\newsales` ou na pasta Documentos).
+3. Abra um terminal **dentro da pasta extraída**:
+   - Windows: abra a pasta no Explorador de Arquivos, clique na barra de endereço, digite `powershell` e tecle Enter.
+   - Mac: abra o Terminal, digite `cd ` (com espaço), arraste a pasta para a janela e tecle Enter.
+4. Gere o `.env` (o próprio Docker roda o script, sem precisar de Linux):
+
+   ```
+   docker run --rm -v "${PWD}:/w" -w /w alpine sh -c "apk add -q bash openssl && bash scripts/setup-env.sh"
+   ```
+
+   Anote a senha do administrador que aparece no final.
+5. Suba o sistema (a primeira vez leva de 10 a 15 minutos):
+
+   ```
+   docker compose up -d --build
+   ```
+
+6. Abra **http://localhost** no navegador e entre com `admin@suaempresa.com.br` e a senha anotada.
+
+Se a porta 80 estiver ocupada (comum no Windows), acrescente ao final do arquivo `.env` as linhas `HTTP_PORT=8080` e `PUBLIC_URL=http://localhost:8080`, rode o passo 5 de novo e use http://localhost:8080.
+
+Para desligar: `docker compose down` (os dados ficam guardados). Para apagar tudo, inclusive conversas e sessões: `docker compose down -v`.
+
 ## Instalação
 
 ### 1. Servidor
