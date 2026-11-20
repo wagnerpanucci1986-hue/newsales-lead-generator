@@ -1,0 +1,873 @@
+// Modelo de dados — plataforma de disparo e atendimento WhatsApp (Baileys).
+// Convenções: ids cuid, timestamps UTC, telefones sempre em E.164 sem "+" (ex.: 5511999998888).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────── Usuários e segurança ─────────────────────────
+
+enum Role {
+  ADMIN // tudo, inclusive usuários e configurações
+  MANAGER // números, campanhas, contatos, relatórios
+  AGENT // só conversas dos números atribuídos a ele
+}
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  name         String
+  passwordHash String // argon2id
+  role         Role    @default(AGENT)
+  active       Boolean @default(true)
+
+  // 2FA (TOTP). O segredo é cifrado com AES-256-GCM (chave em ENCRYPTION_KEY).
+  totpEnabled       Boolean  @default(false)
+  totpSecretEnc     String?
+  totpRecoveryCodes String[] // hashes argon2 dos códigos de recuperação
+
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  numberAccess       UserNumberAccess[]
+  assignedConvs      Conversation[]      @relation("ConversationAssignee")
+  sentMessages       Message[]
+  campaigns          Campaign[]
+  auditLogs          AuditLog[]
+  importJobs         ImportJob[]
+  refreshTokens      RefreshToken[]
+  conversationEvents ConversationEvent[]
+}
+
+// Refresh tokens rotativos (o access token JWT é curto e não é persistido).
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique // sha256 do token
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String? // null = ação do sistema (worker, automação)
+  action    String // ex.: "number.create", "campaign.pause", "auth.login"
+  entity    String? // ex.: "WaNumber"
+  entityId  String?
+  meta      Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([entity, entityId])
+}
+
+// Configurações globais chave/valor (horário comercial, palavras de opt-out,
+// padrões de anti-banimento etc.). Ver docs/01-arquitetura.md para as chaves.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// ───────────────────────── Números (sessões WhatsApp) ─────────────────────────
+
+enum NumberStatus {
+  DISCONNECTED // sem socket ativo (nunca pareado, deslogado ou parado manualmente)
+  CONNECTING // socket abrindo / reconectando
+  QR_PENDING // aguardando leitura do QR Code
+  CONNECTED
+  SUSPECT // auto-pausado por falhas em sequência / queda de qualidade
+  BANNED // WhatsApp recusou a sessão (403 / conta restrita)
+}
+
+model WaNumber {
+  id       String       @id @default(cuid())
+  nickname String
+  color    String       @default("#22c55e") // hex, usado na UI
+  phone    String?      @unique // preenchido após o pareamento
+  jid      String? // ex.: 5511999998888@s.whatsapp.net
+  lid      String? // identificador LID da própria conta (Baileys v7)
+  status   NumberStatus @default(DISCONNECTED)
+
+  // Se true, o worker tenta manter a sessão conectada (reconexão automática no boot).
+  autoConnect Boolean @default(false)
+
+  // Anti-banimento
+  dailyLimit          Int       @default(200) // teto de mensagens de campanha por dia
+  warmupEnabled       Boolean   @default(true)
+  warmupStartedAt     DateTime? // início da rampa; null = começa no 1º envio
+  campaignEnabled     Boolean   @default(true) // false = só atendimento
+  consecutiveFailures Int       @default(0)
+  nextSendAt          DateTime? // próximo disparo de campanha permitido (ritmo anti-banimento)
+  resumedAt           DateTime? // liberado por um gestor após pausa automática; a checagem de qualidade ignora envios anteriores
+  pauseReason         String? // preenchido quando o número foi pausado automaticamente (status SUSPECT)
+
+  statusReason       String? // explicação do status atual, mostrada no painel
+  lastConnectedAt    DateTime?
+  lastDisconnectedAt DateTime?
+  lastDisconnectCode Int? // DisconnectReason do Baileys
+  deletedAt          DateTime? // soft delete; fora da contagem do limite de 10
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  authKeys        WaAuthKey[]
+  userAccess      UserNumberAccess[]
+  conversations   Conversation[]
+  messages        Message[]
+  dailyStats      NumberDailyStat[]
+  campaigns       CampaignNumber[]
+  recipients      CampaignRecipient[]
+  automationRules AutomationRule[]
+
+  @@index([status])
+}
+
+// Estado de autenticação do Baileys (creds + chaves Signal), cifrado em repouso.
+// category "creds"/keyId "creds" guarda as credenciais; demais categorias seguem
+// o SignalKeyStore (pre-key, session, sender-key, app-state-sync-key, lid-mapping…).
+model WaAuthKey {
+  numberId  String
+  category  String
+  keyId     String
+  valueEnc  String // AES-256-GCM: base64(iv | tag | ciphertext) do JSON (BufferJSON)
+  updatedAt DateTime @updatedAt
+
+  number WaNumber @relation(fields: [numberId], references: [id], onDelete: Cascade)
+
+  @@id([numberId, category, keyId])
+}
+
+// Quais números cada atendente enxerga (ADMIN/MANAGER enxergam todos).
+model UserNumberAccess {
+  userId   String
+  numberId String
+
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  number WaNumber @relation(fields: [numberId], references: [id], onDelete: Cascade)
+
+  @@id([userId, numberId])
+  @@index([numberId])
+}
+
+// Contadores diários por número (limite diário, aquecimento e dashboard).
+model NumberDailyStat {
+  numberId     String
+  date         DateTime @db.Date // dia no fuso APP_TIMEZONE
+  campaignSent Int      @default(0) // conta para o limite diário
+  sent         Int      @default(0) // todas as enviadas (painel, celular, automação, campanha)
+  received     Int      @default(0)
+  delivered    Int      @default(0)
+  read         Int      @default(0)
+  failed       Int      @default(0)
+
+  number WaNumber @relation(fields: [numberId], references: [id], onDelete: Cascade)
+
+  @@id([numberId, date])
+  @@index([date])
+}
+
+// ───────────────────────── Contatos, listas e blacklist ─────────────────────────
+
+enum WaCheckStatus {
+  UNKNOWN // ainda não verificado
+  VALID // número existe no WhatsApp
+  INVALID // não tem WhatsApp
+}
+
+model Contact {
+  id           String        @id @default(cuid())
+  phone        String        @unique // E.164 sem "+", normalizado (BR: 55 + DDD + número)
+  name         String?
+  company      String?
+  email        String?
+  customFields Json          @default("{}") // { "cidade": "SP", ... } — viram variáveis {{cidade}}
+  waStatus     WaCheckStatus @default(UNKNOWN)
+  waJid        String? // jid retornado pelo onWhatsApp (trata o 9º dígito)
+  waCheckedAt  DateTime?
+  pushName     String? // nome de perfil visto em mensagens recebidas
+
+  // LGPD: origem do consentimento e opt-out.
+  consentSource String? // ex.: "formulário site 2026-03", preenchido na importação
+  consentAt     DateTime?
+  optedOutAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tags          ContactTag[]
+  lists         ContactListMember[]
+  conversations Conversation[]
+  recipients    CampaignRecipient[]
+
+  @@index([company])
+  @@index([waStatus])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Contact_name_trgm_idx")
+  @@index([pushName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Contact_pushName_trgm_idx")
+  @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "Contact_phone_trgm_idx")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("#64748b")
+  createdAt DateTime @default(now())
+
+  contacts      ContactTag[]
+  conversations ConversationTag[]
+}
+
+model ContactTag {
+  contactId String
+  tagId     String
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@index([tagId])
+}
+
+// Lista estática (membros explícitos). Segmentação dinâmica é feita por filtro
+// salvo em Campaign.audienceFilter (etiquetas, campos, listas).
+model ContactList {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members   ContactListMember[]
+  campaigns CampaignList[]
+  imports   ImportJob[]
+}
+
+model ContactListMember {
+  listId    String
+  contactId String
+  addedAt   DateTime @default(now())
+
+  list    ContactList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  contact Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@id([listId, contactId])
+  @@index([contactId])
+}
+
+enum BlacklistSource {
+  OPT_OUT // contato enviou a palavra-chave (ex.: SAIR)
+  MANUAL
+  IMPORT
+}
+
+// Blacklist global: nenhum disparo ou automação envia para estes telefones.
+// Mantida separada de Contact para valer mesmo se o contato for apagado/reimportado.
+model BlacklistEntry {
+  phone     String          @id // E.164 sem "+"
+  source    BlacklistSource @default(MANUAL)
+  reason    String?
+  createdAt DateTime        @default(now())
+}
+
+enum ImportStatus {
+  UPLOADED // arquivo recebido, aguardando mapeamento de colunas
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model ImportJob {
+  id            String       @id @default(cuid())
+  fileName      String
+  storageKey    String // arquivo original no storage
+  status        ImportStatus @default(UPLOADED)
+  columnMapping Json? // { "Telefone": "phone", "Nome": "name", "Cidade": "custom:cidade" }
+  listId        String? // lista de destino (opcional)
+  tagIds        String[] // etiquetas aplicadas a todos os importados
+  consentSource String?
+  verifyWa      Boolean      @default(false) // enfileira checagem onWhatsApp após importar
+
+  totalRows   Int     @default(0)
+  created     Int     @default(0)
+  updated     Int     @default(0) // já existiam (deduplicados por telefone)
+  invalid     Int     @default(0) // telefone inválido
+  blacklisted Int     @default(0)
+  errorReport Json? // amostra de linhas rejeitadas
+  error       String?
+
+  createdById String?
+  createdAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  list      ContactList? @relation(fields: [listId], references: [id], onDelete: SetNull)
+  createdBy User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+}
+
+// ───────────────────────── Conversas e mensagens (espelhamento) ─────────────────────────
+
+enum ConversationStatus {
+  OPEN // em atendimento
+  PENDING // aguardando atendente (handoff) ou resposta
+  CLOSED
+}
+
+model Conversation {
+  id        String  @id @default(cuid())
+  numberId  String
+  remoteJid String // jid canônico do chat (…@s.whatsapp.net, …@lid ou …@g.us)
+  altJid    String? // jid alternativo (par PN<->LID) para casar eventos dos dois formatos
+  isGroup   Boolean @default(false)
+  contactId String? // null para grupos
+  title     String? // nome do grupo ou pushName
+
+  status             ConversationStatus @default(OPEN)
+  assignedUserId     String?
+  // Automação pausada quando um humano assume (envio pelo painel ou pelo celular).
+  automationPausedAt DateTime?
+  // IA do SDR: ACTIVE responde e faz follow-up; também respeita automationPausedAt.
+  aiStatus           AiStatus           @default(OFF)
+
+  unreadCount        Int       @default(0)
+  lastMessageAt      DateTime?
+  lastMessagePreview String?
+  lastMessageFromMe  Boolean   @default(false)
+  lastInboundAt      DateTime? // usado por "fora do horário"/cooldowns
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  number   WaNumber            @relation(fields: [numberId], references: [id], onDelete: Cascade)
+  contact  Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  assignee User?               @relation("ConversationAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  messages Message[]
+  tags     ConversationTag[]
+  events   ConversationEvent[]
+  sdrLead  SdrLead?
+  sdrRuns  SdrRun[]
+
+  @@unique([numberId, remoteJid])
+  @@index([numberId, lastMessageAt(sort: Desc)])
+  @@index([status, lastMessageAt(sort: Desc)])
+  @@index([assignedUserId, status])
+  @@index([contactId])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Conversation_title_trgm_idx")
+}
+
+model ConversationTag {
+  conversationId String
+  tagId          String
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tag          Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, tagId])
+  @@index([tagId])
+}
+
+// Linha do tempo interna da conversa (atribuição, handoff, fechamento, notas).
+model ConversationEvent {
+  id             String   @id @default(cuid())
+  conversationId String
+  userId         String?
+  type           String // "assigned" | "handoff" | "closed" | "reopened" | "note" | "automation_paused"
+  data           Json?
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  STICKER
+  LOCATION
+  CONTACT
+  REACTION
+  OTHER // enquete, botão, tipos não mapeados — guardamos o payload bruto
+}
+
+// De onde a mensagem saiu. Tudo que tem fromMe=true e não foi originado
+// pelo sistema é PHONE (celular físico / WhatsApp Web), detectado no espelhamento.
+enum MessageSource {
+  INBOUND // recebida do contato
+  PANEL // enviada por um atendente no painel
+  PHONE // enviada pelo celular ou WhatsApp Web
+  CAMPAIGN
+  AUTOMATION
+  AI // escrita pela IA do SDR
+}
+
+enum MessageStatus {
+  PENDING // na fila de envio
+  SENT // aceita pelo servidor (1 tique)
+  DELIVERED // 2 tiques
+  READ // 2 tiques azuis
+  PLAYED // áudio ouvido
+  FAILED
+  RECEIVED // mensagens inbound
+}
+
+model Message {
+  id             String @id @default(cuid())
+  conversationId String
+  numberId       String
+  // Id da mensagem no WhatsApp. Único por número: garante idempotência do
+  // espelhamento (histórico + upsert + reenvio de eventos).
+  waMessageId    String
+
+  fromMe         Boolean
+  source         MessageSource
+  type           MessageType
+  status         MessageStatus
+  text           String? // corpo ou legenda
+  participantJid String? // autor, em grupos
+  pushName       String?
+  quotedWaId     String? // id da mensagem respondida
+  raw            Json? // payload bruto para tipos OTHER / depuração
+
+  timestamp   DateTime // horário do WhatsApp
+  deliveredAt DateTime?
+  readAt      DateTime?
+  editedAt    DateTime?
+  revokedAt   DateTime? // apagada para todos; o conteúdo original é mantido
+  error       String?
+
+  sentByUserId        String? // PANEL
+  campaignRecipientId String? @unique // CAMPAIGN
+
+  createdAt DateTime @default(now())
+
+  conversation      Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  number            WaNumber           @relation(fields: [numberId], references: [id], onDelete: Cascade)
+  sentBy            User?              @relation(fields: [sentByUserId], references: [id], onDelete: SetNull)
+  campaignRecipient CampaignRecipient? @relation(fields: [campaignRecipientId], references: [id], onDelete: SetNull)
+  media             Media?
+
+  @@unique([numberId, waMessageId])
+  // Busca textual (ILIKE '%termo%'): índice trigram. A extensão pg_trgm é criada na migration.
+  @@index([text(ops: raw("gin_trgm_ops"))], type: Gin, map: "Message_text_trgm_idx")
+  @@index([conversationId, timestamp])
+  @@index([numberId, timestamp])
+}
+
+enum MediaStatus {
+  PENDING // download agendado
+  STORED
+  FAILED // mídia expirada no servidor do WhatsApp ou erro de download
+}
+
+model Media {
+  id         String      @id @default(cuid())
+  messageId  String?     @unique // null = upload do painel/campanha ainda não vinculado
+  status     MediaStatus @default(PENDING)
+  storageKey String? // caminho no disco local ou chave no S3/MinIO
+  mimeType   String
+  fileName   String?
+  size       Int?
+  sha256     String?
+  durationS  Int? // áudio/vídeo
+  width      Int?
+  height     Int?
+  isPtt      Boolean     @default(false) // áudio "gravado na hora"
+  error      String?
+  createdAt  DateTime    @default(now())
+
+  message         Message?         @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  campaigns       Campaign[]
+  automationRules AutomationRule[]
+}
+
+// ───────────────────────── Campanhas ─────────────────────────
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED // aguardando scheduledAt
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELED
+}
+
+model Campaign {
+  id     String         @id @default(cuid())
+  name   String
+  status CampaignStatus @default(DRAFT)
+
+  // Conteúdo: variáveis {{nome}} e spintax {Olá|Oi}. Renderizado por destinatário.
+  body    String
+  mediaId String? // anexo (imagem, PDF, áudio, vídeo)
+
+  // Público: listas estáticas (CampaignList) e/ou filtro dinâmico resolvido no início.
+  audienceFilter Json? // { tagIds: [], customFields: {…}, onlyWaValid: true }
+
+  // Agendamento e janela de envio (no fuso `timezone`).
+  scheduledAt DateTime?
+  timezone    String    @default("America/Sao_Paulo")
+  sendDays    Int[]     @default([1, 2, 3, 4, 5]) // 0=dom … 6=sáb
+  windowStart String    @default("09:00")
+  windowEnd   String    @default("18:00")
+
+  // Anti-banimento (sobrepõe os padrões globais).
+  minDelayS        Int         @default(15)
+  maxDelayS        Int         @default(60)
+  longPauseEvery   Int         @default(20) // pausa longa a cada N mensagens (por número)
+  longPauseMinS    Int         @default(300)
+  longPauseMaxS    Int         @default(900)
+  simulateTyping   Boolean     @default(true)
+  // LGPD: quem criou confirmou a base legal do público. Obrigatório para iniciar.
+  consentConfirmed Boolean     @default(false)
+  legalBasis       LegalBasis?
+  // IA do SDR atende quem responder. Variações aprovadas da 1ª mensagem: uma é sorteada por envio.
+  sdrEnabled       Boolean     @default(false)
+  variants         String[]
+
+  // Os números do relatório são sempre contados em CampaignRecipient (fonte única).
+  totalRecipients Int @default(0)
+
+  createdById String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  media      Media?              @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  createdBy  User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  numbers    CampaignNumber[]
+  lists      CampaignList[]
+  recipients CampaignRecipient[]
+
+  @@index([status, scheduledAt])
+}
+
+// Números participantes do rodízio da campanha.
+model CampaignNumber {
+  campaignId String
+  numberId   String
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  number   WaNumber @relation(fields: [numberId], references: [id], onDelete: Cascade)
+
+  @@id([campaignId, numberId])
+  @@index([numberId])
+}
+
+model CampaignList {
+  campaignId String
+  listId     String
+
+  campaign Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  list     ContactList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@id([campaignId, listId])
+}
+
+enum RecipientStatus {
+  QUEUED // aguardando um número pegar
+  SENDING // reservado por um número (claim)
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED // blacklist, sem WhatsApp, opt-out ou campanha cancelada
+}
+
+// Um registro por contato por campanha: é a "fila durável" do disparo.
+// O worker de cada número faz claim do próximo QUEUED (FOR UPDATE SKIP LOCKED).
+model CampaignRecipient {
+  id         String          @id @default(cuid())
+  campaignId String
+  contactId  String
+  numberId   String? // número que enviou (definido no claim)
+  status     RecipientStatus @default(QUEUED)
+
+  renderedText String? // texto final após variáveis + spintax (auditoria)
+  skipReason   String?
+  error        String?
+  attempts     Int     @default(0)
+
+  claimedAt   DateTime?
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  readAt      DateTime?
+  repliedAt   DateTime? // 1ª resposta do contato após o envio
+  optedOutAt  DateTime? // contato respondeu com a palavra de descadastro
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaign Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  number   WaNumber? @relation(fields: [numberId], references: [id], onDelete: SetNull)
+  message  Message?
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId, status])
+  @@index([numberId, status])
+  @@index([contactId, sentAt])
+}
+
+// ───────────────────────── Automação de respostas ─────────────────────────
+
+enum AutomationTrigger {
+  KEYWORD
+  OUT_OF_HOURS // qualquer mensagem recebida fora do horário comercial (Setting "businessHours")
+}
+
+enum KeywordMatch {
+  EXACT // mensagem inteira == palavra (sem acento/caixa)
+  CONTAINS
+  STARTS_WITH
+}
+
+enum AutomationAction {
+  REPLY // só responde
+  HANDOFF // responde (opcional) e encaminha: conversa vira PENDING e automação pausa
+}
+
+model AutomationRule {
+  id        String            @id @default(cuid())
+  name      String
+  enabled   Boolean           @default(true)
+  priority  Int               @default(0) // maior primeiro; a 1ª regra que casar vence
+  trigger   AutomationTrigger
+  matchType KeywordMatch      @default(CONTAINS)
+  keywords  String[]
+  numberId  String? // null = vale para todos os números
+
+  action          AutomationAction @default(REPLY)
+  responseText    String? // aceita {{nome}} e spintax
+  mediaId         String?
+  // Não repetir a mesma regra para a mesma conversa dentro deste intervalo.
+  cooldownMinutes Int              @default(60)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  number WaNumber? @relation(fields: [numberId], references: [id], onDelete: Cascade)
+  media  Media?    @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+
+  @@index([enabled, trigger, priority])
+}
+
+// Base legal declarada para uma campanha (LGPD).
+enum LegalBasis {
+  CONSENT // os contatos autorizaram o recebimento
+  LEGITIMATE_INTEREST // prospecção B2B de empresas, com descadastro em toda mensagem
+}
+
+// ───────────────────────── Captação: base pública de CNPJ (Receita Federal) ─────────────────────────
+// Só estabelecimentos ATIVOS e COM TELEFONE das UFs importadas. Tabelas grandes e
+// independentes do resto: nada aqui é contato até alguém importar pela tela de Captação.
+
+model CnpjEstablishment {
+  cnpj             String    @id // 14 caracteres; aceita o CNPJ alfanumérico (2026)
+  cnpjBase         String
+  isMatriz         Boolean
+  nomeFantasia     String?
+  cnaePrincipal    String
+  cnaesSecundarios String[]
+  uf               String
+  municipioCodigo  String
+  municipio        String?
+  bairro           String?
+  cep              String?
+  endereco         String?
+  phone            String? // primeiro telefone válido, E.164 sem "+"
+  mobile           String? // primeiro celular válido, E.164 sem "+"
+  hasMobile        Boolean   @default(false)
+  // Quantas empresas (CNPJ base) usam o mesmo telefone: alto = em geral, o contador.
+  phoneShared      Int       @default(1)
+  email            String?
+  dataInicio       DateTime? @db.Date
+  importId         String // última importação que trouxe esta linha
+
+  @@index([uf, municipioCodigo])
+  @@index([cnaePrincipal])
+  @@index([cnaesSecundarios], type: Gin)
+  @@index([cnpjBase])
+  @@index([importId])
+  @@index([phoneShared])
+}
+
+model CnpjCompany {
+  cnpjBase         String  @id
+  razaoSocial      String
+  naturezaJuridica String?
+  capitalSocial    Float?
+  porte            String? // 00 não informado, 01 micro, 03 pequeno porte, 05 demais
+  isMei            Boolean @default(false)
+  isSimples        Boolean @default(false)
+
+  @@index([porte])
+  @@index([capitalSocial])
+}
+
+model CnpjCnae {
+  code        String @id // 7 dígitos
+  description String
+}
+
+model CnpjMunicipio {
+  code String @id // código da Receita (não é o do IBGE)
+  name String
+}
+
+model CnpjNatureza {
+  code        String @id
+  description String
+}
+
+enum CnpjImportStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// Cada atualização da base (download e filtragem dos arquivos da Receita).
+model CnpjImport {
+  id          String           @id @default(cuid())
+  status      CnpjImportStatus @default(RUNNING)
+  ufs         String[]
+  source      String? // de onde vieram os arquivos
+  competencia String? // pasta AAAA-MM da Receita, quando conhecida
+  progress    String? // última etapa, para a tela
+  stats       Json?
+  error       String?
+  createdById String?
+  startedAt   DateTime         @default(now())
+  finishedAt  DateTime?
+
+  @@index([startedAt])
+}
+
+// ───────────────────────── Captação: perfis comerciais do Instagram ─────────────────────────
+// Dados públicos lidos pela API oficial da Meta (Business Discovery), um perfil por vez.
+// A API não entrega telefone nem e-mail: só os que estiverem escritos na bio ou no link.
+
+model InstagramProfile {
+  username          String    @id // sem "@", minúsculo
+  igId              String?
+  name              String?
+  biography         String?
+  website           String?
+  followersCount    Int?
+  followsCount      Int?
+  mediaCount        Int?
+  profilePictureUrl String?
+  lastPostAt        DateTime?
+  phones            String[] // encontrados na bio ou no link (wa.me, api.whatsapp.com), normalizados
+  emails            String[]
+  error             String? // perfil não encontrado, não comercial etc.
+  fetchedAt         DateTime  @default(now())
+
+  @@index([fetchedAt])
+}
+
+// ───────────────────────── IA do SDR ─────────────────────────
+
+enum AiStatus {
+  OFF // a IA não atua nesta conversa
+  ACTIVE // responde e faz follow-up
+  DONE // atendimento encerrado pela IA (frio, descadastro, passado a humano)
+}
+
+enum LeadStage {
+  ABERTURA
+  DESCOBERTA
+  CONEXAO
+  CONVITE
+  AGENDADO
+  ENCERRADO
+}
+
+enum LeadTemperature {
+  QUENTE
+  MORNO
+  FRIO
+}
+
+// Ficha do lead montada pela IA ao longo da conversa (vai para o consultor).
+model SdrLead {
+  id             String           @id @default(cuid())
+  conversationId String           @unique
+  campaignId     String?
+  stage          LeadStage        @default(ABERTURA)
+  temperature    LeadTemperature?
+
+  cargo         String?
+  produto       String?
+  estados       String?
+  porte         String?
+  experiencia   String?
+  dor           String?
+  objecoes      String[]
+  melhorHorario String?
+  email         String?
+  proximoPasso  String?
+  motivo        String? // por que esfriou, encerrou ou foi passado a humano
+
+  followUpCount  Int       @default(0)
+  nextFollowUpAt DateTime?
+
+  meetingStart      DateTime?
+  meetingEnd        DateTime?
+  meetingEventId    String?
+  meetingLink       String?
+  consultantName    String?
+  consultantEmail   String?
+  remindedDayBefore Boolean   @default(false)
+  remindedSameDay   Boolean   @default(false)
+
+  handoffTo String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([nextFollowUpAt])
+  @@index([meetingStart])
+  @@index([temperature, stage])
+}
+
+// Cada vez que a IA rodou: para custo, auditoria e depuração.
+model SdrRun {
+  id              String   @id @default(cuid())
+  conversationId  String
+  trigger         String // inbound | followup | reminder
+  status          String // ok | skipped | error
+  reply           String?
+  toolCalls       Json?
+  inputTokens     Int      @default(0)
+  outputTokens    Int      @default(0)
+  cacheReadTokens Int      @default(0)
+  error           String?
+  createdAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([createdAt])
+}

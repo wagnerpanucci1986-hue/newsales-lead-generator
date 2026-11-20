@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.env
+.env.*
+!.env.example
+data/
+*.log
+next-env.d.ts
+*.tsbuildinfo
+!apps/web/.env.development
+backups/
+dados-cnpj/*
+!dados-cnpj/LEIA-ME.txt

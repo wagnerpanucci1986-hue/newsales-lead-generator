@@ -1,0 +1,27 @@
+# Proxy de entrada. Com um domínio em SITE_ADDRESS, o Caddy emite e renova o
+# certificado HTTPS sozinho (Let's Encrypt). Com ":80", serve só HTTP (teste local).
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options DENY
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# API e tempo real (WebSocket) vão para o backend; o resto é o painel.
+	@backend path /api/* /socket.io/*
+	handle @backend {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

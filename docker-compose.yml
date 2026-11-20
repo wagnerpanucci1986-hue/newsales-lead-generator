@@ -1,0 +1,161 @@
+# Plataforma completa. Uso: ver README.md ("Instalação").
+#   docker compose up -d --build
+# Só a porta 80/443 (Caddy) fica exposta; banco, Redis, API e worker ficam na rede interna.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-backend-env: &backend-env
+  NODE_ENV: production
+  APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  WEB_URL: ${PUBLIC_URL:-http://localhost}
+  API_PORT: 4000
+  DATABASE_URL: postgresql://${POSTGRES_USER:-newsales}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@postgres:5432/${POSTGRES_DB:-newsales}?schema=public
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env}
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?defina ENCRYPTION_KEY no .env}
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  MAX_NUMBERS: ${MAX_NUMBERS:-10}
+  MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-50}
+  MAX_MEDIA_MB: ${MAX_MEDIA_MB:-100}
+  SYNC_FULL_HISTORY: ${SYNC_FULL_HISTORY:-true}
+  HISTORY_MEDIA_DAYS: ${HISTORY_MEDIA_DAYS:-7}
+  WA_VERSION: ${WA_VERSION:-}
+  BAILEYS_LOG_LEVEL: ${BAILEYS_LOG_LEVEL:-warn}
+  META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v24.0}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
+  WA_BROWSER: ${WA_BROWSER:-chrome}
+  STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+  STORAGE_LOCAL_PATH: /data/media
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-newsales}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-newsales}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # appendonly: as filas sobrevivem a reinício · noeviction: exigência do BullMQ
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  # Roda uma vez a cada subida: aplica migrations e cria o primeiro administrador (se não houver).
+  migrate:
+    build: { context: ., dockerfile: docker/api.Dockerfile }
+    image: newsales-api:latest
+    environment:
+      <<: *backend-env
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    command: ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/scripts/seed.js"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    logging: *logging
+
+  api:
+    build: { context: ., dockerfile: docker/api.Dockerfile }
+    image: newsales-api:latest
+    restart: unless-stopped
+    init: true
+    environment: *backend-env
+    volumes:
+      - media:/data/media
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *logging
+
+  # Dono das sessões do WhatsApp. NUNCA escale para mais de uma réplica:
+  # a mesma sessão aberta duas vezes é derrubada pelo WhatsApp.
+  worker:
+    build: { context: ., dockerfile: docker/api.Dockerfile }
+    image: newsales-api:latest
+    restart: unless-stopped
+    init: true
+    command: ["node", "apps/api/dist/worker.js"]
+    environment:
+      <<: *backend-env
+      CNPJ_LOCAL_DIR: /data/cnpj-local
+      CNPJ_TMP_DIR: /data/cnpj-tmp
+    volumes:
+      - media:/data/media
+      # Captação: ZIPs da Receita baixados à mão (opcional) e área temporária dos downloads.
+      - ./dados-cnpj:/data/cnpj-local:ro
+      - cnpj_tmp:/data/cnpj-tmp
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    # Tempo para fechar as sessões com calma ao parar/atualizar.
+    stop_grace_period: 30s
+    logging: *logging
+
+  web:
+    build: { context: ., dockerfile: docker/web.Dockerfile }
+    image: newsales-web:latest
+    restart: unless-stopped
+    init: true
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+    logging: *logging
+
+volumes:
+  pgdata:
+  redisdata:
+  media:
+  caddy_data:
+  caddy_config:
+  cnpj_tmp:
