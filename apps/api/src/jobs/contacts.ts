@@ -2,6 +2,7 @@ import { ImportStatus, WaCheckStatus, type Prisma } from '@prisma/client';
 import { Worker } from 'bullmq';
 import type { Readable } from 'node:stream';
 import { runCnpjToContacts } from '../cnpj/to-contacts.js';
+import { runInstagramToContacts } from '../instagram/to-contacts.js';
 import { publishEvent } from '../lib/events.js';
 import { logger } from '../lib/logger.js';
 import { normalizePhone } from '../lib/phone.js';
@@ -196,6 +197,7 @@ export function createContactsWorker(sessions: SocketProvider): Worker<ContactsJ
     async (job) => {
       if (job.data.kind === 'import') return runImport(job.data.importId);
       if (job.data.kind === 'cnpj-contacts') return runCnpjToContacts(job.data.importId);
+      if (job.data.kind === 'instagram-contacts') return runInstagramToContacts(job.data.importId);
       await runVerify(sessions, job.data);
     },
     // Uma verificação por vez: duas em paralelo dobrariam o ritmo de consultas.

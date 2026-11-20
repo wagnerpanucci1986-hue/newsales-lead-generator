@@ -753,3 +753,26 @@ model CnpjImport {
 
   @@index([startedAt])
 }
+
+// ───────────────────────── Captação: perfis comerciais do Instagram ─────────────────────────
+// Dados públicos lidos pela API oficial da Meta (Business Discovery), um perfil por vez.
+// A API não entrega telefone nem e-mail: só os que estiverem escritos na bio ou no link.
+
+model InstagramProfile {
+  username          String    @id // sem "@", minúsculo
+  igId              String?
+  name              String?
+  biography         String?
+  website           String?
+  followersCount    Int?
+  followsCount      Int?
+  mediaCount        Int?
+  profilePictureUrl String?
+  lastPostAt        DateTime?
+  phones            String[] // encontrados na bio ou no link (wa.me, api.whatsapp.com), normalizados
+  emails            String[]
+  error             String? // perfil não encontrado, não comercial etc.
+  fetchedAt         DateTime  @default(now())
+
+  @@index([fetchedAt])
+}

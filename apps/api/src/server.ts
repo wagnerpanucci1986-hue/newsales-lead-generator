@@ -20,6 +20,7 @@ import { contactRoutes } from './modules/contacts/routes.js';
 import { conversationRoutes } from './modules/conversations/routes.js';
 import { dashboardRoutes } from './modules/dashboard/routes.js';
 import { importRoutes } from './modules/imports/routes.js';
+import { instagramRoutes } from './modules/instagram/routes.js';
 import { listRoutes } from './modules/lists/routes.js';
 import { mediaRoutes } from './modules/media/routes.js';
 import { tagRoutes } from './modules/tags/routes.js';
@@ -71,6 +72,7 @@ async function main() {
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' });
   await app.register(auditRoutes, { prefix: '/api/audit' });
   await app.register(cnpjRoutes, { prefix: '/api/cnpj' });
+  await app.register(instagramRoutes, { prefix: '/api/instagram' });
 
   const io = attachRealtime(app.server);
 

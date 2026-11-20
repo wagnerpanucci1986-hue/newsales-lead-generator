@@ -41,6 +41,8 @@ export type ContactsJob =
   | { kind: 'import'; importId: string }
   // Empresas da base de CNPJ → Contatos (usa um ImportJob para acompanhar).
   | { kind: 'cnpj-contacts'; importId: string }
+  // Perfis do Instagram já pesquisados → Contatos.
+  | { kind: 'instagram-contacts'; importId: string }
   // Verifica no WhatsApp os contatos ainda não checados (de uma lista, de uma importação ou todos).
   | { kind: 'verify'; numberId: string; listId?: string; contactIds?: string[] };
 

@@ -1,7 +1,8 @@
-import { ImportStatus, type Prisma } from '@prisma/client';
+import { ImportStatus } from '@prisma/client';
 import { publishEvent } from '../lib/events.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
+import { upsertProspects, type ProspectCandidate } from '../lib/prospects.js';
 import { formatCnpj, PORTE_LABEL, titleCase } from './layout.js';
 import { cnpjFiltersSchema, selectForImport, type CnpjResult } from './search.js';
 
@@ -44,55 +45,14 @@ export async function runCnpjToContacts(importJobId: string): Promise<void> {
   try {
     if (!opts) throw new Error('importação sem parâmetros');
     const rows = await selectForImport(cnpjFiltersSchema.parse(opts.filters), { cnpjs: opts.cnpjs, limit: opts.limit });
-    let created = 0;
-    let updated = 0;
     let noPhone = 0;
-    let blacklisted = 0;
-    const ids: string[] = [];
-
-    for (let i = 0; i < rows.length; i += 500) {
-      const chunk = rows.slice(i, i + 500);
-      const candidates = new Map<string, NonNullable<ReturnType<typeof contactFromCnpj>>>();
-      for (const r of chunk) {
-        const c = contactFromCnpj(r, opts.includeFixed);
-        if (!c) noPhone++;
-        else if (!candidates.has(c.phone)) candidates.set(c.phone, c); // matriz e filial com o mesmo telefone
-      }
-      const phones = [...candidates.keys()];
-      const [existing, blocked] = await Promise.all([
-        prisma.contact.findMany({ where: { phone: { in: phones } }, select: { id: true, phone: true, name: true, company: true, email: true, customFields: true } }),
-        prisma.blacklistEntry.findMany({ where: { phone: { in: phones } }, select: { phone: true } }),
-      ]);
-      const blockedSet = new Set(blocked.map((b) => b.phone));
-      const existingByPhone = new Map(existing.map((c) => [c.phone, c]));
-
-      const fresh = [...candidates.values()].filter((c) => !existingByPhone.has(c.phone) && !blockedSet.has(c.phone));
-      blacklisted += [...candidates.keys()].filter((p) => blockedSet.has(p)).length;
-      if (fresh.length) {
-        await prisma.contact.createMany({
-          data: fresh.map((c) => ({ phone: c.phone, name: c.name, company: c.company, email: c.email, customFields: c.customFields, consentSource: job.consentSource })),
-          skipDuplicates: true,
-        });
-        created += fresh.length;
-      }
-      // Já existentes: completa só o que estiver vazio, sem sobrescrever o que alguém editou.
-      for (const current of existing) {
-        if (blockedSet.has(current.phone)) continue;
-        const c = candidates.get(current.phone)!;
-        const data: Prisma.ContactUpdateInput = {
-          customFields: { ...c.customFields, ...((current.customFields as Record<string, string>) ?? {}) },
-        };
-        if (!current.name && c.name) data.name = c.name;
-        if (!current.company && c.company) data.company = c.company;
-        if (!current.email && c.email) data.email = c.email;
-        await prisma.contact.update({ where: { id: current.id }, data });
-        updated++;
-      }
-      const chunkIds = (await prisma.contact.findMany({ where: { phone: { in: phones.filter((p) => !blockedSet.has(p)) } }, select: { id: true } })).map((c) => c.id);
-      ids.push(...chunkIds);
-      if (job.listId) await prisma.contactListMember.createMany({ data: chunkIds.map((contactId) => ({ contactId, listId: job.listId! })), skipDuplicates: true });
-      for (const tagId of job.tagIds) await prisma.contactTag.createMany({ data: chunkIds.map((contactId) => ({ contactId, tagId })), skipDuplicates: true });
+    const candidates: ProspectCandidate[] = [];
+    for (const r of rows) {
+      const c = contactFromCnpj(r, opts.includeFixed);
+      if (c) candidates.push(c);
+      else noPhone++;
     }
+    const { created, updated, blacklisted } = await upsertProspects(job, candidates);
 
     await prisma.importJob.update({
       where: { id: importJobId },

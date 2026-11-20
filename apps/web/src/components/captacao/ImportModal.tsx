@@ -7,12 +7,16 @@ import type { ContactList, ImportJob } from '@/lib/crm';
 import type { Tag } from '@/lib/inbox';
 import { Modal } from '../Modal';
 
-/** Leva as empresas marcadas (ou as primeiras N do filtro) para Contatos, com etiquetas e lista. */
-export function ImportModal({ filters, selected, total, segment, onClose, onDone }: {
-  filters: CnpjFilters;
-  selected: string[];
-  total: number;
-  segment: string;
+/**
+ * Leva leads de captação para Contatos, com etiquetas e lista: empresas da base de CNPJ
+ * (marcadas ou as primeiras N do filtro) ou perfis do Instagram (`instagram`).
+ */
+export function ImportModal({ filters, selected = [], total = 0, segment = '', instagram, onClose, onDone }: {
+  filters?: CnpjFilters;
+  selected?: string[];
+  total?: number;
+  segment?: string;
+  instagram?: string[];
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -20,15 +24,15 @@ export function ImportModal({ filters, selected, total, segment, onClose, onDone
   const [lists, setLists] = useState<ContactList[]>([]);
   const [tagIds, setTagIds] = useState<string[]>([]);
   const today = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
-  const [newTags, setNewTags] = useState(['CNPJ', filters.uf, segment].filter(Boolean).join(', '));
+  const [newTags, setNewTags] = useState(instagram ? 'Instagram' : ['CNPJ', filters?.uf, segment].filter(Boolean).join(', '));
   const [listChoice, setListChoice] = useState('new');
-  const [newListName, setNewListName] = useState(`CNPJ ${filters.uf}${segment ? ` ${segment}` : ''} ${today}`);
+  const [newListName, setNewListName] = useState(instagram ? `Instagram ${today}` : `CNPJ ${filters?.uf ?? ''}${segment ? ` ${segment}` : ''} ${today}`);
   const [limit, setLimit] = useState(String(Math.min(total, 500)));
   const [includeFixed, setIncludeFixed] = useState(false);
   const [job, setJob] = useState<ImportJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const useSelection = selected.length > 0;
+  const useSelection = !instagram && selected.length > 0;
 
   useEffect(() => {
     api<{ tags: Tag[] }>('/tags').then((r) => setTags(r.tags)).catch(() => undefined);
@@ -45,19 +49,24 @@ export function ImportModal({ filters, selected, total, segment, onClose, onDone
     setBusy(true);
     setError(null);
     try {
-      const res = await api<{ import: ImportJob }>('/cnpj/import', {
-        method: 'POST',
-        body: {
-          filters: toApiFilters(filters),
-          cnpjs: useSelection ? selected : undefined,
-          limit: useSelection ? selected.length : Math.max(1, Math.min(5000, Number(limit) || 1)),
-          includeFixed,
-          tagIds,
-          newTags: newTags.split(',').map((t) => t.trim()).filter(Boolean).filter((t) => !tags.some((x) => x.name === t)),
-          listId: listChoice && listChoice !== 'new' ? listChoice : null,
-          newListName: listChoice === 'new' ? newListName : null,
-        },
-      });
+      const destination = {
+        tagIds,
+        newTags: newTags.split(',').map((t) => t.trim()).filter(Boolean).filter((t) => !tags.some((x) => x.name === t)),
+        listId: listChoice && listChoice !== 'new' ? listChoice : null,
+        newListName: listChoice === 'new' ? newListName : null,
+      };
+      const res = instagram
+        ? await api<{ import: ImportJob }>('/instagram/import', { method: 'POST', body: { usernames: instagram, ...destination } })
+        : await api<{ import: ImportJob }>('/cnpj/import', {
+            method: 'POST',
+            body: {
+              filters: toApiFilters(filters!),
+              cnpjs: useSelection ? selected : undefined,
+              limit: useSelection ? selected.length : Math.max(1, Math.min(5000, Number(limit) || 1)),
+              includeFixed,
+              ...destination,
+            },
+          });
       // Etiquetas digitadas que já existem entram pelo id.
       setJob(res.import);
     } catch (err) {
@@ -78,10 +87,10 @@ export function ImportModal({ filters, selected, total, segment, onClose, onDone
       {!job ? (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">
-            {useSelection ? <><strong>{selected.length}</strong> empresas marcadas.</> : <>Importar as primeiras empresas do filtro (de {total.toLocaleString('pt-BR')}), na ordem da lista.</>}
+            {instagram ? <><strong>{instagram.length}</strong> perfis marcados. Entra o primeiro telefone encontrado na bio ou no link de cada um.</> : useSelection ? <><strong>{selected.length}</strong> empresas marcadas.</> : <>Importar as primeiras empresas do filtro (de {total.toLocaleString('pt-BR')}), na ordem da lista.</>}
             {' '}Quem já é contato só ganha as etiquetas e a lista; quem está na lista de bloqueio fica de fora.
           </p>
-          {!useSelection && (
+          {!useSelection && !instagram && (
             <div>
               <label className="label" htmlFor="ci-limit">Quantas empresas</label>
               <input id="ci-limit" type="number" min={1} max={5000} className="input max-w-40" value={limit} onChange={(e) => setLimit(e.target.value)} />
@@ -106,10 +115,10 @@ export function ImportModal({ filters, selected, total, segment, onClose, onDone
               <div><label className="label" htmlFor="ci-newlist">Nome da lista</label><input id="ci-newlist" className="input" value={newListName} onChange={(e) => setNewListName(e.target.value)} /></div>
             )}
           </div>
-          <label className="flex items-start gap-2 text-sm">
+          {!instagram && <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-600" checked={includeFixed} onChange={(e) => setIncludeFixed(e.target.checked)} />
             <span>Incluir empresas só com telefone fixo <span className="block text-xs text-slate-500">Desligado, entra só quem tem celular. Fixo raramente tem WhatsApp.</span></span>
-          </label>
+          </label>}
           {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
           <div className="flex justify-end gap-2">
             <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
@@ -122,7 +131,7 @@ export function ImportModal({ filters, selected, total, segment, onClose, onDone
           {job.status === 'FAILED' && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">A importação falhou: {job.error}</p>}
           {job.status === 'COMPLETED' && (
             <dl className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
-              {[['Novos contatos', job.created], ['Já existiam', job.updated], ['Sem celular', job.invalid], ['Na lista de bloqueio', job.blacklisted]].map(([label, value]) => (
+              {[['Novos contatos', job.created], ['Já existiam', job.updated], [instagram ? 'Sem telefone' : 'Sem celular', job.invalid], ['Na lista de bloqueio', job.blacklisted]].map(([label, value]) => (
                 <div key={label} className="rounded-lg bg-slate-50 px-2 py-3">
                   <dd className="text-lg font-semibold tabular-nums">{Number(value).toLocaleString('pt-BR')}</dd>
                   <dt className="text-xs text-slate-500">{label}</dt>

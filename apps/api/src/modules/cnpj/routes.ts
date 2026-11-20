@@ -4,9 +4,10 @@ import { z } from 'zod';
 import { CNPJ_CONSENT_SOURCE } from '../../cnpj/to-contacts.js';
 import { cnpjFiltersSchema, searchCnpj } from '../../cnpj/search.js';
 import { audit } from '../../lib/audit.js';
-import { isUniqueViolation, prisma } from '../../lib/prisma.js';
+import { prisma } from '../../lib/prisma.js';
 import { cnpjQueue, contactsQueue } from '../../lib/queues.js';
 import { authenticate, HttpError, requireRole } from '../auth/guard.js';
+import { destinationSchema, resolveDestination } from '../prospect-destination.js';
 
 const UFS = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'] as const;
 const MAX_IMPORT = 5000;
@@ -28,10 +29,7 @@ const importBody = z.object({
   cnpjs: z.array(z.string().regex(/^[0-9A-Z]{14}$/)).max(MAX_IMPORT).optional(),
   limit: z.number().int().min(1).max(MAX_IMPORT).default(500),
   includeFixed: z.boolean().default(false),
-  tagIds: z.array(z.string()).max(20).default([]),
-  newTags: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
-  listId: z.string().nullish(),
-  newListName: z.string().trim().min(1).max(80).nullish(),
+  ...destinationSchema,
 });
 
 /** Captação pela base pública de CNPJ: só Admin e Gestor. */
@@ -97,20 +95,7 @@ export async function cnpjRoutes(app: FastifyInstance) {
   // Leva as empresas escolhidas para Contatos, em segundo plano (acompanha por /api/imports/:id).
   app.post('/import', async (req, reply) => {
     const b = importBody.parse(req.body);
-    const tagIds = [...b.tagIds];
-    for (const name of b.newTags) {
-      const tag = await prisma.tag.upsert({ where: { name }, create: { name }, update: {} });
-      tagIds.push(tag.id);
-    }
-    let listId = b.listId ?? null;
-    if (b.newListName) {
-      try {
-        listId = (await prisma.contactList.create({ data: { name: b.newListName } })).id;
-      } catch (err) {
-        if (isUniqueViolation(err)) throw new HttpError(409, 'Já existe uma lista com este nome');
-        throw err;
-      }
-    }
+    const { tagIds, listId } = await resolveDestination(b);
     const count = b.cnpjs?.length ?? b.limit;
     const job = await prisma.importJob.create({
       data: {
@@ -120,7 +105,7 @@ export async function cnpjRoutes(app: FastifyInstance) {
         totalRows: count,
         columnMapping: { cnpj: { filters: b.filters, cnpjs: b.cnpjs, limit: count, includeFixed: b.includeFixed } },
         listId,
-        tagIds: [...new Set(tagIds)],
+        tagIds,
         consentSource: CNPJ_CONSENT_SOURCE,
         createdById: req.user.id,
       },

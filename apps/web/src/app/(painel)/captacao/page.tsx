@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BaseStatus } from '@/components/captacao/BaseStatus';
+import { CaptacaoTabs } from '@/components/captacao/CaptacaoTabs';
 import { ImportModal } from '@/components/captacao/ImportModal';
 import { MultiPicker, type PickOption } from '@/components/captacao/MultiPicker';
 import { Pagination } from '@/components/Pagination';
@@ -101,6 +102,7 @@ export default function CaptacaoPage() {
         <h1 className="text-xl font-semibold">Captação</h1>
         <p className="text-sm text-slate-500">Empresas ativas da base pública de CNPJ da Receita Federal, prontas para virar contatos.</p>
       </div>
+      <CaptacaoTabs />
       {status && <BaseStatus status={status} onChanged={loadStatus} />}
       <div role="note" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
         <strong>Prospecção fria pede cuidado.</strong> A base é pública, mas o telefone de MEI e empresário individual costuma ser da própria pessoa. Use legítimo interesse com opção de saída em toda mensagem, mande para quem tem relação com o que você vende e comece com lotes pequenos: denúncias de quem não esperava a mensagem são a principal causa de banimento.

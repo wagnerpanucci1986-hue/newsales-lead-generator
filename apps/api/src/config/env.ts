@@ -41,6 +41,8 @@ const schema = z.object({
   CNPJ_LISTING_URL: z.string().default('https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj/'),
   CNPJ_NEXTCLOUD_URL: z.string().default('https://arquivos.receitafederal.gov.br'),
   CNPJ_NEXTCLOUD_TOKEN: z.string().default('YggdBLfdninEJX9'),
+  // Versão da Graph API da Meta usada na pesquisa de perfis do Instagram.
+  META_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default('v24.0'),
   BAILEYS_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('warn'),
 
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),

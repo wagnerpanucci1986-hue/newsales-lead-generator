@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { InstagramConnectionCard } from '@/components/instagram/ConnectionCard';
 
 interface Settings {
   optOut: { keywords: string[]; confirmation: string };
@@ -101,6 +102,7 @@ export default function SettingsPage() {
           <button className="btn btn-primary" type="submit" disabled={user.role !== 'ADMIN'}>Salvar</button>
         </div>
       </form>
+      <InstagramConnectionCard canEdit={user.role === 'ADMIN'} />
     </div>
   );
 }
