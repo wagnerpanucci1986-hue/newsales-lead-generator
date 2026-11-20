@@ -60,9 +60,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Gerar .env
+      # Mesmo comando que o README manda usar no Windows e no Mac (o script roda num container
+      # Alpine). O chown só existe aqui: no Linux o arquivo nasceria do root.
+      - name: Gerar .env (como no Docker Desktop)
         run: |
-          ./scripts/setup-env.sh
+          docker run --rm -v "${PWD}:/w" -w /w alpine sh -c "apk add -q bash openssl && bash scripts/setup-env.sh && chown $(id -u):$(id -g) .env"
+          test -s .env && grep -q '^ENCRYPTION_KEY=[0-9a-f]\{64\}$' .env
           sed -i 's/^ADMIN_EMAIL=.*/ADMIN_EMAIL=ci@exemplo.com.br/; s/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=senha-do-ci-123/' .env
       - name: Build das imagens
         run: docker compose build
