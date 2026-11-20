@@ -23,6 +23,7 @@ export function conversationDto(c: ConversationRow) {
     lastMessagePreview: c.lastMessagePreview,
     lastMessageFromMe: c.lastMessageFromMe,
     automationPaused: Boolean(c.automationPausedAt),
+    aiStatus: c.aiStatus,
     number: c.number,
     contact: c.contact,
     assignee: c.assignee,

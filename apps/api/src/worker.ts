@@ -7,6 +7,8 @@ import { createContactsWorker } from './jobs/contacts.js';
 import { createMediaWorker } from './jobs/media.js';
 import { createOutboundWorker } from './jobs/outbound.js';
 import { createSessionWorker } from './jobs/session.js';
+import { createSdrWorker } from './jobs/sdr.js';
+import { sdrTick } from './sdr/scheduler.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { redis } from './lib/redis.js';
@@ -39,15 +41,17 @@ async function main() {
   logger.info({ instanceId }, 'worker iniciado');
 
   const sessions = new SessionManager();
-  const workers = [createSessionWorker(sessions), createMediaWorker(sessions), createOutboundWorker(sessions), createContactsWorker(sessions), createCampaignWorker(), createCnpjWorker()];
+  const workers = [createSessionWorker(sessions), createMediaWorker(sessions), createOutboundWorker(sessions), createContactsWorker(sessions), createCampaignWorker(), createCnpjWorker(), createSdrWorker(sessions)];
   const dispatcher = new CampaignDispatcher(sessions);
 
   let stopping = false;
+  let sdrTimer: NodeJS.Timeout | undefined;
   const shutdown = async (signal: string, code = 0) => {
     if (stopping) return;
     stopping = true;
     logger.info({ signal }, 'encerrando worker');
     clearInterval(renew);
+    clearInterval(sdrTimer);
     dispatcher.stop();
     await Promise.allSettled(workers.map((w) => w.close()));
     await sessions.shutdown();
@@ -72,6 +76,7 @@ async function main() {
   await failInterruptedCnpjImports();
   await sessions.boot();
   dispatcher.start();
+  sdrTimer = setInterval(() => void sdrTick().catch((err) => logger.error({ err }, 'erro no agendador da IA do SDR')), 60_000);
 }
 
 // Erros soltos de bibliotecas não podem derrubar todas as sessões.

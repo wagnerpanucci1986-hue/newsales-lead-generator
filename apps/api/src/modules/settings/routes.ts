@@ -17,7 +17,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.put('/:key', async (req) => {
     const { key } = params.parse(req.params);
-    if (req.user.role !== Role.ADMIN && key === 'antiBan') throw new HttpError(403, 'Só administradores alteram os parâmetros de anti-banimento');
+    if (req.user.role !== Role.ADMIN && (key === 'antiBan' || key === 'sdr')) throw new HttpError(403, key === 'sdr' ? 'Só administradores alteram a IA do SDR' : 'Só administradores alteram os parâmetros de anti-banimento');
     const value = await setSetting(key, req.body);
     await audit({ userId: req.user.id, action: 'settings.update', entity: 'Setting', entityId: key, meta: value as object, ip: req.ip });
     return { [key]: value };

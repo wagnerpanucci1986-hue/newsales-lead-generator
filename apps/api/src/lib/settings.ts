@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { prisma } from './prisma.js';
+import { DEFAULT_KNOWLEDGE_BASE } from '../sdr/knowledge-base.js';
 
 // Configurações globais (tabela Setting). Cada chave tem um schema com padrões,
 // então o sistema funciona sem nenhuma linha gravada.
@@ -24,6 +25,27 @@ export const settingSchemas = {
     days: z.array(z.number().int().min(0).max(6)).max(7).default([1, 2, 3, 4, 5]),
     start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('09:00'),
     end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('18:00'),
+  }),
+  // IA do SDR: persona, base de conhecimento, consultores e regras de agenda e follow-up.
+  sdr: z.object({
+    enabled: z.boolean().default(false),
+    agentName: z.string().trim().min(1).max(40).default('Ana'),
+    model: z.string().trim().min(1).max(60).default('claude-opus-5-5'),
+    effort: z.enum(['low', 'medium', 'high']).default('medium'),
+    knowledgeBase: z.string().max(60_000).default(DEFAULT_KNOWLEDGE_BASE),
+    consultants: z
+      .array(z.object({ name: z.string().trim().min(1).max(60), email: z.string().trim().email(), active: z.boolean().default(true) }))
+      .max(20)
+      .default([]),
+    meetingMinutes: z.number().int().min(10).max(120).default(20),
+    meetingDays: z.array(z.number().int().min(0).max(6)).max(7).default([1, 2, 3, 4, 5]),
+    meetingStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('09:00'),
+    meetingEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('18:00'),
+    minNoticeHours: z.number().int().min(0).max(72).default(3),
+    // Follow-ups sem resposta, em dias depois da última mensagem da IA (o último é a despedida).
+    followUpDays: z.array(z.number().int().min(1).max(60)).max(5).default([2, 5, 10]),
+    // Espera antes de responder: junta mensagens seguidas do lead e não parece robô.
+    replyDelaySeconds: z.number().int().min(5).max(600).default(40),
   }),
 } as const;
 

@@ -67,7 +67,19 @@ export const campaignQueue = new Queue<CampaignJob>(QUEUE_CAMPAIGN, {
   defaultJobOptions: { removeOnComplete: 100, removeOnFail: 500, attempts: 1 },
 });
 
+/** IA do SDR: responder ao lead, follow-up sem resposta e lembretes de reunião. */
+export const QUEUE_SDR = 'sdr';
+export type SdrJob =
+  | { kind: 'reply'; conversationId: string; triggerAt: number }
+  | { kind: 'followup'; conversationId: string }
+  | { kind: 'reminder'; conversationId: string; when: 'vespera' | 'dia' };
+export const sdrQueue = new Queue<SdrJob>(QUEUE_SDR, {
+  connection,
+  // Ids ficam guardados por um tempo: impedem enfileirar duas vezes o mesmo follow-up.
+  defaultJobOptions: { removeOnComplete: 1000, removeOnFail: 1000, attempts: 3, backoff: { type: 'exponential', delay: 60_000 } },
+});
+
 /** Fecha as conexões de todas as filas (encerramento da API e testes). */
 export async function closeQueues(): Promise<void> {
-  await Promise.allSettled([sessionQueue, mediaQueue, outboundQueue, contactsQueue, campaignQueue, cnpjQueue].map((q) => q.close()));
+  await Promise.allSettled([sessionQueue, mediaQueue, outboundQueue, contactsQueue, campaignQueue, cnpjQueue, sdrQueue].map((q) => q.close()));
 }

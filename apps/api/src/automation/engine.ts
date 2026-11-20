@@ -8,6 +8,7 @@ import { prisma } from '../lib/prisma.js';
 import { outboundQueue } from '../lib/queues.js';
 import { getSetting } from '../lib/settings.js';
 import { renderTemplate } from '../lib/template.js';
+import { queueSdrReply, stopSdrOnOptOut } from '../sdr/trigger.js';
 
 // Só responde a mensagens recém-chegadas: nada de responder ao que foi sincronizado horas depois.
 const MAX_AGE_MS = 5 * 60_000;
@@ -29,7 +30,9 @@ export function matchesKeyword(rule: Pick<AutomationRule, 'matchType' | 'keyword
  */
 export async function processInbound(ctx: InboundContext, now = new Date()): Promise<void> {
   const { optedOut } = await handleInbound(ctx);
-  if (optedOut) return;
+  if (optedOut) return stopSdrOnOptOut(ctx.conversationId);
+  // Conversa atendida pela IA do SDR: ela responde, as respostas automáticas ficam quietas.
+  if (await queueSdrReply(ctx, now)) return;
   await runAutomations(ctx, now);
 }
 

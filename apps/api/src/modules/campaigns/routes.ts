@@ -47,6 +47,8 @@ const campaignBody = z
     simulateTyping: z.boolean().default(true),
     consentConfirmed: z.boolean().default(false),
     legalBasis: z.enum(LegalBasis).nullish(),
+    sdrEnabled: z.boolean().default(false),
+    variants: z.array(z.string().trim().min(1).max(4096)).max(20).default([]),
   })
   .refine((c) => c.maxDelayS >= c.minDelayS, { message: 'o intervalo máximo deve ser maior ou igual ao mínimo', path: ['maxDelayS'] })
   .refine((c) => c.longPauseMaxS >= c.longPauseMinS, { message: 'a pausa longa máxima deve ser maior ou igual à mínima', path: ['longPauseMaxS'] });
@@ -102,6 +104,8 @@ function relations(body: z.infer<typeof campaignBody>) {
     simulateTyping: body.simulateTyping,
     consentConfirmed: body.consentConfirmed,
     legalBasis: body.legalBasis ?? null,
+    sdrEnabled: body.sdrEnabled,
+    variants: body.variants,
   };
 }
 
@@ -223,7 +227,8 @@ export async function campaignRoutes(app: FastifyInstance) {
     if (c.status !== CampaignStatus.DRAFT) throw new HttpError(409, 'Esta campanha já foi iniciada');
     const legal = legalBasisProblem(c, (await getSetting('optOut')).keywords);
     if (legal) throw new HttpError(400, legal);
-    if (!c.body.trim() && !c.media) throw new HttpError(400, 'Escreva a mensagem ou adicione um anexo.');
+    if (!c.body.trim() && !c.variants.length && !c.media) throw new HttpError(400, 'Escreva a mensagem ou adicione um anexo.');
+    if (c.sdrEnabled && !(await getSetting('sdr')).enabled) throw new HttpError(400, 'A campanha usa a IA do SDR, mas ela está desligada. Ligue em SDR (IA) ou desmarque a opção na campanha.');
     if (!c.numbers.length) throw new HttpError(400, 'Escolha ao menos um número para enviar.');
     const filter = audienceFilterSchema.parse(c.audienceFilter ?? {});
     if (!c.lists.length && !filter.tagIds.length) throw new HttpError(400, 'Escolha ao menos uma lista ou etiqueta como público.');

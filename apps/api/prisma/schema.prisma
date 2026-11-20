@@ -340,6 +340,8 @@ model Conversation {
   assignedUserId     String?
   // Automação pausada quando um humano assume (envio pelo painel ou pelo celular).
   automationPausedAt DateTime?
+  // IA do SDR: ACTIVE responde e faz follow-up; também respeita automationPausedAt.
+  aiStatus           AiStatus           @default(OFF)
 
   unreadCount        Int       @default(0)
   lastMessageAt      DateTime?
@@ -356,6 +358,8 @@ model Conversation {
   messages Message[]
   tags     ConversationTag[]
   events   ConversationEvent[]
+  sdrLead  SdrLead?
+  sdrRuns  SdrRun[]
 
   @@unique([numberId, remoteJid])
   @@index([numberId, lastMessageAt(sort: Desc)])
@@ -412,6 +416,7 @@ enum MessageSource {
   PHONE // enviada pelo celular ou WhatsApp Web
   CAMPAIGN
   AUTOMATION
+  AI // escrita pela IA do SDR
 }
 
 enum MessageStatus {
@@ -534,6 +539,9 @@ model Campaign {
   // LGPD: quem criou confirmou a base legal do público. Obrigatório para iniciar.
   consentConfirmed Boolean     @default(false)
   legalBasis       LegalBasis?
+  // IA do SDR atende quem responder. Variações aprovadas da 1ª mensagem: uma é sorteada por envio.
+  sdrEnabled       Boolean     @default(false)
+  variants         String[]
 
   // Os números do relatório são sempre contados em CampaignRecipient (fonte única).
   totalRecipients Int @default(0)
@@ -775,4 +783,91 @@ model InstagramProfile {
   fetchedAt         DateTime  @default(now())
 
   @@index([fetchedAt])
+}
+
+// ───────────────────────── IA do SDR ─────────────────────────
+
+enum AiStatus {
+  OFF // a IA não atua nesta conversa
+  ACTIVE // responde e faz follow-up
+  DONE // atendimento encerrado pela IA (frio, descadastro, passado a humano)
+}
+
+enum LeadStage {
+  ABERTURA
+  DESCOBERTA
+  CONEXAO
+  CONVITE
+  AGENDADO
+  ENCERRADO
+}
+
+enum LeadTemperature {
+  QUENTE
+  MORNO
+  FRIO
+}
+
+// Ficha do lead montada pela IA ao longo da conversa (vai para o consultor).
+model SdrLead {
+  id             String           @id @default(cuid())
+  conversationId String           @unique
+  campaignId     String?
+  stage          LeadStage        @default(ABERTURA)
+  temperature    LeadTemperature?
+
+  cargo         String?
+  produto       String?
+  estados       String?
+  porte         String?
+  experiencia   String?
+  dor           String?
+  objecoes      String[]
+  melhorHorario String?
+  email         String?
+  proximoPasso  String?
+  motivo        String? // por que esfriou, encerrou ou foi passado a humano
+
+  followUpCount  Int       @default(0)
+  nextFollowUpAt DateTime?
+
+  meetingStart      DateTime?
+  meetingEnd        DateTime?
+  meetingEventId    String?
+  meetingLink       String?
+  consultantName    String?
+  consultantEmail   String?
+  remindedDayBefore Boolean   @default(false)
+  remindedSameDay   Boolean   @default(false)
+
+  handoffTo String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([nextFollowUpAt])
+  @@index([meetingStart])
+  @@index([temperature, stage])
+}
+
+// Cada vez que a IA rodou: para custo, auditoria e depuração.
+model SdrRun {
+  id              String   @id @default(cuid())
+  conversationId  String
+  trigger         String // inbound | followup | reminder
+  status          String // ok | skipped | error
+  reply           String?
+  toolCalls       Json?
+  inputTokens     Int      @default(0)
+  outputTokens    Int      @default(0)
+  cacheReadTokens Int      @default(0)
+  error           String?
+  createdAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([createdAt])
 }

@@ -21,6 +21,7 @@ import { conversationRoutes } from './modules/conversations/routes.js';
 import { dashboardRoutes } from './modules/dashboard/routes.js';
 import { importRoutes } from './modules/imports/routes.js';
 import { instagramRoutes } from './modules/instagram/routes.js';
+import { googleRoutes, sdrRoutes } from './modules/sdr/routes.js';
 import { listRoutes } from './modules/lists/routes.js';
 import { mediaRoutes } from './modules/media/routes.js';
 import { tagRoutes } from './modules/tags/routes.js';
@@ -73,6 +74,8 @@ async function main() {
   await app.register(auditRoutes, { prefix: '/api/audit' });
   await app.register(cnpjRoutes, { prefix: '/api/cnpj' });
   await app.register(instagramRoutes, { prefix: '/api/instagram' });
+  await app.register(sdrRoutes, { prefix: '/api/sdr' });
+  await app.register(googleRoutes, { prefix: '/api/google' });
 
   const io = attachRealtime(app.server);
 

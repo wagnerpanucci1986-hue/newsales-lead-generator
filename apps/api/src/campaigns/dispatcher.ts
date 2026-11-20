@@ -12,6 +12,7 @@ import { renderTemplate } from '../lib/template.js';
 import { localDay } from '../lib/time.js';
 import { brPhoneVariants } from '../whatsapp/jid.js';
 import { sendPendingMessage, type SocketProvider } from '../whatsapp/sender.js';
+import { activateSdr } from '../sdr/activation.js';
 import { dailyCap, inSendWindow, msUntilNextLocalDay, randomBetween } from './rules.js';
 
 export type TickOutcome = 'idle' | 'daily-limit' | 'out-of-window' | 'empty' | 'skipped' | 'sent' | 'failed';
@@ -154,7 +155,9 @@ export class CampaignDispatcher {
       if (!jid) return skip('sem WhatsApp', randomBetween(3_000, 6_000, this.random));
     }
 
-    const text = renderTemplate(campaign.body, contact, this.random);
+    // Variações aprovadas (geradas pela IA): uma por envio, sorteada; senão, o texto da campanha.
+    const body = campaign.variants.length ? campaign.variants[Math.floor(this.random() * campaign.variants.length)]! : campaign.body;
+    const text = renderTemplate(body, contact, this.random);
     const type = campaign.media ? messageTypeForMime(campaign.media.mimeType) : MessageType.TEXT;
     if (!text && !campaign.media) return skip('mensagem vazia', 500);
 
@@ -200,6 +203,7 @@ export class CampaignDispatcher {
       await prisma.campaignRecipient.updateMany({ where: { id: recipient.id, status: RecipientStatus.SENDING }, data: { status: RecipientStatus.SENT } });
       await prisma.campaignRecipient.update({ where: { id: recipient.id }, data: { sentAt: this.now() } });
       await bumpDailyStat(numberId, 'campaignSent');
+      if (campaign.sdrEnabled) await activateSdr(conversationId, campaign.id, this.now());
       await prisma.waNumber.update({ where: { id: numberId }, data: { consecutiveFailures: 0, warmupStartedAt: number.warmupStartedAt ?? now } });
       outcome = 'sent';
     } else {
