@@ -32,6 +32,9 @@ const schema = z.object({
   // Força a versão do WhatsApp Web (ex.: 2.3000.1029000000). Só para emergência; vazio = automático.
   WA_VERSION: z.string().optional(),
   // Detalhe dos logs da biblioteca do WhatsApp (warn, info, debug). Use debug só para diagnóstico.
+  // Como o sistema se identifica ao WhatsApp. "chrome" (padrão) = WhatsApp Web no navegador.
+  // "desktop" = app de computador, pede o histórico completo, mas o WhatsApp pode recusar o pareamento.
+  WA_BROWSER: z.enum(['chrome', 'desktop']).default('chrome'),
   BAILEYS_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('warn'),
 
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),

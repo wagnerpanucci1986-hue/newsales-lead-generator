@@ -92,14 +92,15 @@ export class SessionManager {
     // Versão atual do WhatsApp Web: com a embutida (antiga), o servidor encerra a conexão antes do QR.
     // Depois de uma recusa do servidor, busca de novo em vez de usar o cache.
     const { version, source } = await getWaVersion((this.retries.get(numberId)?.attempts ?? 0) > 0);
-    log.info({ version: version?.join('.') ?? 'embutida', source }, 'conectando ao WhatsApp');
+    log.info({ version: version?.join('.') ?? 'embutida', source, browser: env.WA_BROWSER }, 'conectando ao WhatsApp');
 
     const sock = makeWASocket({
       version,
       auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, baileysLog) },
       logger: baileysLog,
-      // Identificar-se como app desktop é o que libera o histórico completo.
-      browser: Browsers.macOS('Desktop'),
+      // Identificação ao WhatsApp. "desktop" se apresenta como o app nativo do Mac com versão do
+      // WhatsApp Web; no primeiro teste real, o WhatsApp recusou esse registro (código 428).
+      browser: env.WA_BROWSER === 'desktop' ? Browsers.macOS('Desktop') : Browsers.macOS('Chrome'),
       syncFullHistory: env.SYNC_FULL_HISTORY,
       shouldSyncHistoryMessage: () => true,
       // Não marca o número como "online": o celular continua recebendo notificações.

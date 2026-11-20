@@ -44,7 +44,8 @@ O último item precisa ser validado na sua máquina ou servidor antes de seguir 
 ## Riscos e limitações desta fase
 
 1. **Sem teste contra o WhatsApp real** (acima). É o primeiro ponto a validar.
-2. **Histórico grande demora.** Cada mensagem do histórico é gravada individualmente; uma conta com dezenas de milhares de mensagens pode levar vários minutos após o pareamento. `SYNC_FULL_HISTORY=false` limita ao período recente.
+2. **Quanto histórico chega no pareamento depende do celular.** O sistema se identifica como WhatsApp Web (`WA_BROWSER=chrome`), que costuma receber os meses mais recentes. O modo `desktop` pede o histórico completo, mas o WhatsApp recusou o pareamento nesse modo no primeiro teste real (código 428).
+3. **Histórico grande demora.** Cada mensagem do histórico é gravada individualmente; uma conta com dezenas de milhares de mensagens pode levar vários minutos após o pareamento. `SYNC_FULL_HISTORY=false` limita ao período recente.
 3. **Mídia do histórico:** só é baixada para mensagens de até `HISTORY_MEDIA_DAYS` dias (padrão 7); as mais antigas ficam sem arquivo.
 4. **Enquetes, botões e listas** aparecem como "mensagem não suportada" (o conteúdo bruto é guardado).
 5. **Recibo de leitura em grupo:** a mensagem é marcada como lida quando o primeiro participante lê.
