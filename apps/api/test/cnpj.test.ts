@@ -155,6 +155,13 @@ test('filtros da busca', async () => {
   assert.equal(await total({ capitalMin: 100000, phone: 'any' }), 3);
   assert.equal(await total({ portes: ['01'] }), 2);
   assert.equal(await total({ q: 'são joão' }), 2, 'busca com acento');
+  assert.equal(await total({ name: 'são joão' }), 2, 'razão ou fantasia');
+  // Busca geral: e-mail, endereço/bairro, descrição do CNAE, telefone e CNPJ.
+  assert.equal(await total({ q: 'padaria.com' }), 1);
+  assert.equal(await total({ q: 'cívico' }), 1);
+  assert.equal(await total({ q: 'vestuário' }), 1);
+  assert.equal(await total({ q: '99999-8888' }), 2, 'telefone com máscara');
+  assert.equal(await total({ q: '91.111.111' }), 2, 'CNPJ com máscara');
   assert.equal(await total({ ddds: ['43'], phone: 'any' }), 1);
   // Matriz e filial da padaria: mesmo CNPJ base, então o telefone não conta como compartilhado.
   assert.equal(await total({ hideSharedPhones: true, phone: 'any' }), 5);

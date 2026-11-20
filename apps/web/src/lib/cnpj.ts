@@ -15,6 +15,7 @@ export interface CnpjFilters {
   phone: 'mobile' | 'any' | 'fixed';
   withEmail: boolean;
   q: string;
+  name: string;
   hideSharedPhones: boolean;
   hideKnown: boolean;
 }
@@ -36,6 +37,7 @@ export const DEFAULT_FILTERS: CnpjFilters = {
   phone: 'mobile',
   withEmail: false,
   q: '',
+  name: '',
   hideSharedPhones: true,
   hideKnown: true,
 };
@@ -48,6 +50,7 @@ export function toApiFilters(f: CnpjFilters) {
     bairro: f.bairro.trim() || undefined,
     cep: f.cep.replace(/\D/g, '') || undefined,
     q: f.q.trim() || undefined,
+    name: f.name.trim() || undefined,
     capitalMin: num(f.capitalMin),
     capitalMax: num(f.capitalMax),
   };

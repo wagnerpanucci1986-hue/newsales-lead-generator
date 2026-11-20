@@ -8,7 +8,12 @@ Nova tela **Captação**, para encontrar empresas na base pública de CNPJ da Re
    - O sistema baixa os arquivos públicos da Receita (cerca de **7 GB**, mesmo para uma UF só, porque eles não vêm separados por estado).
    - Mantém só as empresas **ativas e com telefone** das UFs escolhidas e apaga os arquivos baixados ao terminar.
    - Pela medição com arquivos de teste, a primeira atualização deve levar de **30 a 60 minutos**, conforme a internet e o computador. Dá para sair da tela; o andamento aparece no cartão da base.
-2. **Filtre**: município, atividade (CNAE, com ou sem as secundárias), porte, capital social, MEI, matriz ou filial, tipo de telefone, natureza jurídica, bairro, CEP, DDD, nome ou CNPJ.
+2. **Filtre**. A tela segue as mesmas seções da busca avançada do Redrive:
+   - **Busca geral:** procura ao mesmo tempo em razão social, nome fantasia, atividade (código ou descrição), CNPJ, e-mail, telefone, endereço, bairro e município. CNPJ e telefone podem ir com ou sem pontuação.
+   - **Identificação da empresa:** razão social ou nome fantasia, atividade principal (CNAE, com opção de incluir a secundária) e natureza jurídica.
+   - **Localização:** UF, município, bairro, CEP e DDD.
+   - **Dados financeiros:** capital social de/até e porte. A situação cadastral fica fixa em "Ativa", porque a base só guarda empresas ativas.
+   - **Outros parâmetros:** MEI, matriz ou filial, tipo de telefone, com e-mail, esconder quem já é contato e esconder telefones de contador.
    - O padrão já vem pensado para prospecção: só matriz, sem MEI, com celular, escondendo quem já é contato, quem está bloqueado e telefones de contador.
    - A lista vem ordenada pelo **maior capital social**.
 3. **Importe**: marque empresas ou importe as primeiras N do filtro (até 5.000 por vez).

@@ -18,7 +18,10 @@ export const cnpjFiltersSchema = z.object({
   matriz: z.enum(['any', 'matriz', 'filial']).default('any'),
   phone: z.enum(['mobile', 'any', 'fixed']).default('mobile'),
   withEmail: z.boolean().default(false),
+  // Busca geral: razão, fantasia, CNAE (código ou descrição), CNPJ, e-mail, telefone, endereço, bairro, município.
   q: z.string().trim().max(100).optional(),
+  // Só razão social ou nome fantasia.
+  name: z.string().trim().max(100).optional(),
   // Esconde telefones usados por SHARED_PHONE_LIMIT ou mais empresas (em geral, o contador).
   hideSharedPhones: z.boolean().default(true),
   // Esconde quem já é contato ou está na lista de bloqueio.
@@ -56,12 +59,26 @@ export function cnpjWhere(f: CnpjFilters): Prisma.Sql {
   if (f.phone === 'fixed') and.push(Prisma.sql`e."hasMobile" = false`);
   if (f.withEmail) and.push(Prisma.sql`e."email" IS NOT NULL`);
   if (f.hideSharedPhones) and.push(Prisma.sql`e."phoneShared" < ${SHARED_PHONE_LIMIT}`);
+  if (f.name) {
+    const like = `%${f.name}%`;
+    and.push(Prisma.sql`(e."nomeFantasia" ILIKE ${like} OR c."razaoSocial" ILIKE ${like})`);
+  }
   if (f.q) {
     const like = `%${f.q}%`;
     const digits = f.q.replace(/\D/g, '');
-    and.push(
-      Prisma.sql`(e."nomeFantasia" ILIKE ${like} OR c."razaoSocial" ILIKE ${like}${digits.length >= 4 ? Prisma.sql` OR e."cnpj" LIKE ${`%${digits}%`}` : Prisma.empty})`,
-    );
+    const or: Prisma.Sql[] = [
+      Prisma.sql`e."nomeFantasia" ILIKE ${like}`,
+      Prisma.sql`c."razaoSocial" ILIKE ${like}`,
+      Prisma.sql`e."email" ILIKE ${like}`,
+      Prisma.sql`e."endereco" ILIKE ${like}`,
+      Prisma.sql`e."bairro" ILIKE ${like}`,
+      Prisma.sql`e."municipio" ILIKE ${like}`,
+      Prisma.sql`EXISTS (SELECT 1 FROM "CnpjCnae" x WHERE x."code" = e."cnaePrincipal" AND x."description" ILIKE ${like})`,
+    ];
+    if (digits.length >= 4) {
+      or.push(Prisma.sql`e."cnpj" LIKE ${`%${digits}%`}`, Prisma.sql`e."phone" LIKE ${`%${digits}%`}`, Prisma.sql`e."mobile" LIKE ${`%${digits}%`}`, Prisma.sql`e."cnaePrincipal" LIKE ${`${digits}%`}`);
+    }
+    and.push(Prisma.sql`(${Prisma.join(or, ' OR ')})`);
   }
   if (f.hideKnown) {
     and.push(Prisma.sql`NOT EXISTS (SELECT 1 FROM "Contact" ct WHERE ct."phone" = ${CONTACT_PHONE})`);

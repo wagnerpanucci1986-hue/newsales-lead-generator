@@ -107,82 +107,100 @@ export default function CaptacaoPage() {
       </div>
 
       {loadedUfs.length > 0 && (
-        <form onSubmit={search} className="card space-y-4 p-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <form onSubmit={search} className="card divide-y divide-slate-100">
+          <Section title="Busca geral">
+            <div className="md:col-span-2 xl:col-span-4">
+              <label className="sr-only" htmlFor="f-q">Busca geral</label>
+              <input id="f-q" className="input" placeholder="Procura em razão social, nome fantasia, atividade, CNPJ, e-mail, telefone e endereço" value={filters.q} onChange={(e) => set('q', e.target.value)} />
+            </div>
+          </Section>
+
+          <Section title="Identificação da empresa">
+            <div className="md:col-span-2"><label className="label" htmlFor="f-name">Razão social ou nome fantasia</label><input id="f-name" className="input" value={filters.name} onChange={(e) => set('name', e.target.value)} /></div>
+            <div className="md:col-span-2">
+              <MultiPicker label="Atividade principal (CNAE)" placeholder="Ex.: material de escritório, 4761" selected={cnaePicks} onChange={setCnaePicks} search={searchCnaes} />
+              <label className="mt-1.5 flex items-center gap-2 text-xs text-slate-600">
+                <input type="checkbox" className="accent-emerald-600" checked={filters.includeSecondary} onChange={(e) => set('includeSecondary', e.target.checked)} />
+                Incluir atividade secundária
+              </label>
+            </div>
+            <div className="md:col-span-2"><MultiPicker label="Natureza jurídica" placeholder="Ex.: limitada" selected={natPicks} onChange={setNatPicks} search={searchNaturezas} /></div>
+          </Section>
+
+          <Section title="Localização">
             <div>
-              <label className="label" htmlFor="f-uf">UF</label>
+              <label className="label" htmlFor="f-uf">Estado (UF)</label>
               <select id="f-uf" className="input" value={filters.uf} onChange={(e) => { set('uf', e.target.value); setMunPicks([]); }}>
                 {loadedUfs.map((u) => <option key={u.uf} value={u.uf}>{u.uf} ({u.total.toLocaleString('pt-BR')})</option>)}
               </select>
             </div>
-            <MultiPicker label="Municípios" placeholder="Digite para buscar" selected={munPicks} onChange={setMunPicks} search={searchMunicipios} />
-            <div className="md:col-span-2">
-              <MultiPicker label="Atividade (CNAE)" placeholder="Ex.: material de escritório, 4761" selected={cnaePicks} onChange={setCnaePicks} search={searchCnaes} />
-              <label className="mt-1.5 flex items-center gap-2 text-xs text-slate-600">
-                <input type="checkbox" className="accent-emerald-600" checked={filters.includeSecondary} onChange={(e) => set('includeSecondary', e.target.checked)} />
-                Incluir quem tem a atividade como secundária
-              </label>
+            <MultiPicker label="Município" placeholder="Digite para buscar" selected={munPicks} onChange={setMunPicks} search={searchMunicipios} />
+            <div><label className="label" htmlFor="f-bairro">Bairro</label><input id="f-bairro" className="input" value={filters.bairro} onChange={(e) => set('bairro', e.target.value)} /></div>
+            <div><label className="label" htmlFor="f-cep">CEP (ou o começo dele)</label><input id="f-cep" className="input" inputMode="numeric" placeholder="Ex.: 860" value={filters.cep} onChange={(e) => set('cep', e.target.value)} /></div>
+            <div>
+              <label className="label" htmlFor="f-ddd">DDD (separe por vírgula)</label>
+              <input id="f-ddd" className="input" inputMode="numeric" placeholder="Ex.: 43, 44" value={filters.ddds.join(', ')} onChange={(e) => set('ddds', e.target.value.split(/[,\s]+/).map((d) => d.replace(/\D/g, '')).filter((d) => d.length === 2))} />
             </div>
-          </div>
+          </Section>
 
-          <details className="group" open>
-            <summary className="cursor-pointer text-sm font-medium text-slate-700">Mais filtros</summary>
-            <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <fieldset>
-                <legend className="label">Porte</legend>
-                <div className="flex flex-wrap gap-1.5">
-                  {PORTES.map(([v, l]) => (
-                    <button key={v} type="button" aria-pressed={filters.portes.includes(v)} onClick={() => toggle('portes', v)} className={`rounded-lg border px-2.5 py-1 text-xs font-medium ${filters.portes.includes(v) ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-slate-300 text-slate-500'}`}>{l}</button>
-                  ))}
-                </div>
-              </fieldset>
-              <div>
-                <span className="label">Capital social (R$)</span>
-                <div className="flex items-center gap-2">
-                  <input className="input" inputMode="numeric" placeholder="mínimo" aria-label="Capital social mínimo" value={filters.capitalMin} onChange={(e) => set('capitalMin', e.target.value)} />
-                  <input className="input" inputMode="numeric" placeholder="máximo" aria-label="Capital social máximo" value={filters.capitalMax} onChange={(e) => set('capitalMax', e.target.value)} />
-                </div>
-              </div>
-              <div>
-                <label className="label" htmlFor="f-mei">MEI</label>
-                <select id="f-mei" className="input" value={filters.mei} onChange={(e) => set('mei', e.target.value as CnpjFilters['mei'])}>
-                  <option value="exclude">Excluir MEI</option>
-                  <option value="any">Incluir MEI</option>
-                  <option value="only">Somente MEI</option>
-                </select>
-              </div>
-              <div>
-                <label className="label" htmlFor="f-matriz">Matriz ou filial</label>
-                <select id="f-matriz" className="input" value={filters.matriz} onChange={(e) => set('matriz', e.target.value as CnpjFilters['matriz'])}>
-                  <option value="matriz">Somente matriz</option>
-                  <option value="any">Matriz e filiais</option>
-                  <option value="filial">Somente filiais</option>
-                </select>
-              </div>
-              <div>
-                <label className="label" htmlFor="f-phone">Telefone</label>
-                <select id="f-phone" className="input" value={filters.phone} onChange={(e) => set('phone', e.target.value as CnpjFilters['phone'])}>
-                  <option value="mobile">Com celular</option>
-                  <option value="any">Qualquer telefone</option>
-                  <option value="fixed">Somente fixo</option>
-                </select>
-              </div>
-              <MultiPicker label="Natureza jurídica" placeholder="Ex.: limitada" selected={natPicks} onChange={setNatPicks} search={searchNaturezas} />
-              <div><label className="label" htmlFor="f-bairro">Bairro</label><input id="f-bairro" className="input" value={filters.bairro} onChange={(e) => set('bairro', e.target.value)} /></div>
-              <div><label className="label" htmlFor="f-cep">CEP (início)</label><input id="f-cep" className="input" inputMode="numeric" placeholder="Ex.: 860" value={filters.cep} onChange={(e) => set('cep', e.target.value)} /></div>
-              <div>
-                <label className="label" htmlFor="f-ddd">DDD (separados por vírgula)</label>
-                <input id="f-ddd" className="input" inputMode="numeric" placeholder="Ex.: 43, 44" value={filters.ddds.join(', ')} onChange={(e) => set('ddds', e.target.value.split(/[,\s]+/).map((d) => d.replace(/\D/g, '')).filter((d) => d.length === 2))} />
-              </div>
-              <div className="md:col-span-2"><label className="label" htmlFor="f-q">Nome ou CNPJ</label><input id="f-q" className="input" value={filters.q} onChange={(e) => set('q', e.target.value)} /></div>
-              <div className="flex flex-col justify-end gap-1.5 text-sm">
-                <label className="flex items-center gap-2"><input type="checkbox" className="accent-emerald-600" checked={filters.withEmail} onChange={(e) => set('withEmail', e.target.checked)} />Somente com e-mail</label>
-                <label className="flex items-center gap-2"><input type="checkbox" className="accent-emerald-600" checked={filters.hideKnown} onChange={(e) => set('hideKnown', e.target.checked)} />Esconder quem já é contato ou está bloqueado</label>
-                <label className="flex items-start gap-2"><input type="checkbox" className="mt-1 accent-emerald-600" checked={filters.hideSharedPhones} onChange={(e) => set('hideSharedPhones', e.target.checked)} /><span>Esconder telefones usados por 3 ou mais empresas <span className="block text-xs text-slate-500">Em geral é o telefone do contador.</span></span></label>
+          <Section title="Dados financeiros">
+            <div className="md:col-span-2">
+              <span className="label">Capital social (R$)</span>
+              <div className="flex items-center gap-2">
+                <input className="input" inputMode="numeric" placeholder="de" aria-label="Capital social de" value={filters.capitalMin} onChange={(e) => set('capitalMin', e.target.value)} />
+                <input className="input" inputMode="numeric" placeholder="até" aria-label="Capital social até" value={filters.capitalMax} onChange={(e) => set('capitalMax', e.target.value)} />
               </div>
             </div>
-          </details>
-          <div className="flex justify-end gap-2">
+            <fieldset>
+              <legend className="label">Porte</legend>
+              <div className="flex flex-wrap gap-1.5">
+                {PORTES.map(([v, l]) => (
+                  <button key={v} type="button" aria-pressed={filters.portes.includes(v)} onClick={() => toggle('portes', v)} className={`rounded-lg border px-2.5 py-1 text-xs font-medium ${filters.portes.includes(v) ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-slate-300 text-slate-500'}`}>{l}</button>
+                ))}
+              </div>
+            </fieldset>
+            <div>
+              <label className="label" htmlFor="f-situacao">Situação cadastral</label>
+              <select id="f-situacao" className="input" disabled value="ativa" aria-describedby="f-situacao-hint"><option value="ativa">Ativa</option></select>
+              <p id="f-situacao-hint" className="mt-1 text-xs text-slate-500">A base guarda só empresas ativas: baixada ou inapta não compra.</p>
+            </div>
+          </Section>
+
+          <Section title="Outros parâmetros">
+            <div>
+              <label className="label" htmlFor="f-mei">MEI</label>
+              <select id="f-mei" className="input" value={filters.mei} onChange={(e) => set('mei', e.target.value as CnpjFilters['mei'])}>
+                <option value="exclude">Excluir MEI</option>
+                <option value="any">Incluir MEI</option>
+                <option value="only">Somente MEI</option>
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="f-matriz">Matriz ou filial</label>
+              <select id="f-matriz" className="input" value={filters.matriz} onChange={(e) => set('matriz', e.target.value as CnpjFilters['matriz'])}>
+                <option value="matriz">Somente matriz</option>
+                <option value="any">Matriz e filiais</option>
+                <option value="filial">Somente filial</option>
+              </select>
+            </div>
+            <div>
+              <label className="label" htmlFor="f-phone">Telefone</label>
+              <select id="f-phone" className="input" value={filters.phone} onChange={(e) => set('phone', e.target.value as CnpjFilters['phone'])}>
+                <option value="mobile">Somente celular</option>
+                <option value="any">Celular ou fixo</option>
+                <option value="fixed">Somente fixo</option>
+              </select>
+            </div>
+            <div className="flex flex-col justify-end gap-1.5 text-sm">
+              <label className="flex items-center gap-2"><input type="checkbox" className="accent-emerald-600" checked={filters.withEmail} onChange={(e) => set('withEmail', e.target.checked)} />Com e-mail</label>
+            </div>
+            <div className="flex flex-col gap-1.5 text-sm md:col-span-2 xl:col-span-4">
+              <label className="flex items-center gap-2"><input type="checkbox" className="accent-emerald-600" checked={filters.hideKnown} onChange={(e) => set('hideKnown', e.target.checked)} />Esconder quem já é contato ou está bloqueado</label>
+              <label className="flex items-start gap-2"><input type="checkbox" className="mt-1 accent-emerald-600" checked={filters.hideSharedPhones} onChange={(e) => set('hideSharedPhones', e.target.checked)} /><span>Esconder telefones usados por 3 ou mais empresas <span className="text-xs text-slate-500">(em geral, o telefone do contador)</span></span></label>
+            </div>
+          </Section>
+
+          <div className="flex justify-end gap-2 p-4">
             <button type="button" className="btn btn-secondary" onClick={() => { setFilters({ ...DEFAULT_FILTERS, uf: filters.uf }); setCnaePicks([]); setMunPicks([]); setNatPicks([]); }}>Limpar</button>
             <button type="submit" className="btn btn-primary">Buscar empresas</button>
           </div>
@@ -242,5 +260,15 @@ export default function CaptacaoPage() {
         <ImportModal filters={applied} selected={[...selected]} total={result.total} segment={segment} onClose={() => setImporting(false)} onDone={() => { setImporting(false); setSelected(new Set()); search(); }} />
       )}
     </div>
+  );
+}
+
+/** Bloco de filtros com título, no mesmo agrupamento da tela de busca do Redrive. */
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="p-4">
+      <legend className="float-left mb-3 w-full text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</legend>
+      <div className="clear-left grid gap-4 md:grid-cols-2 xl:grid-cols-4">{children}</div>
+    </fieldset>
   );
 }
