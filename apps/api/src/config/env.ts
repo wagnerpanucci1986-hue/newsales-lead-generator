@@ -29,6 +29,10 @@ const schema = z.object({
   // Espelhamento
   SYNC_FULL_HISTORY: bool.default(true),
   HISTORY_MEDIA_DAYS: z.coerce.number().int().min(0).default(7),
+  // Força a versão do WhatsApp Web (ex.: 2.3000.1029000000). Só para emergência; vazio = automático.
+  WA_VERSION: z.string().optional(),
+  // Detalhe dos logs da biblioteca do WhatsApp (warn, info, debug). Use debug só para diagnóstico.
+  BAILEYS_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('warn'),
 
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   STORAGE_LOCAL_PATH: z.string().default('./data/media'),

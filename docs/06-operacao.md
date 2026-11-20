@@ -184,6 +184,7 @@ docker compose exec postgres psql -U newsales newsales
 | Erro de certificado / HTTPS não sobe | DNS não aponta para o servidor, ou porta 80 fechada | Confira o registro A; `docker compose logs caddy`. |
 | Login volta para a tela de entrada ao recarregar | Acesso por HTTP com `COOKIE_SECURE=true` | Use HTTPS ou deixe `COOKIE_SECURE=false` (o cookie já fica seguro sozinho sob HTTPS). |
 | QR Code não aparece | Worker parado ou sem saída para a internet | `docker compose logs worker`; o `/health` deve mostrar `worker:true`. |
+| QR não aparece e o log mostra `code: 428` ou `405` logo após conectar | O WhatsApp recusou a versão do WhatsApp Web anunciada | O sistema já busca a versão atual a cada conexão; a linha `conectando ao WhatsApp` do log mostra qual usou e de onde. Se a fonte for "embutida" ou "repositório da biblioteca", o computador não conseguiu ler `web.whatsapp.com`. Como último recurso, defina `WA_VERSION` no `.env` com a versão atual e rode `docker compose up -d`. Para investigar, `BAILEYS_LOG_LEVEL=debug` no `.env` detalha a conexão. |
 | QR aparece mas não conecta | Celular sem internet, ou limite de 4 aparelhos conectados no WhatsApp | Desconecte um aparelho antigo no celular e tente de novo. |
 | Número desconecta e volta várias vezes | Rede instável, ou a mesma sessão aberta em outro servidor | Verifique se não há outra instalação com o mesmo backup ligada. |
 | Todos os números caem com `code: 405` | Versão do WhatsApp Web recusada | Atualize o Baileys (seção 6). |

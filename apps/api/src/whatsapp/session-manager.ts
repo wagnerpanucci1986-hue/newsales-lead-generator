@@ -13,10 +13,13 @@ import { clearAuthState, usePostgresAuthState } from './auth-state.js';
 import { isMirroredJid, normalizeJid, phoneFromJid } from './jid.js';
 import { Mirror } from './mirror.js';
 import { fromRaw } from './parse.js';
+import { getWaVersion } from './wa-version.js';
 
 const MAX_QR_ATTEMPTS = 5; // QR Codes gerados antes de desistir do pareamento
 const MAX_BACKOFF_MS = 60_000;
 const BOOT_STAGGER_MS = 3_000; // intervalo entre conexões no boot
+// Pareamento (sem credenciais salvas) que falha antes do QR: desiste após N tentativas e explica no painel.
+const MAX_PAIRING_FAILURES = 4;
 
 interface Session {
   numberId: string;
@@ -80,13 +83,19 @@ export class SessionManager {
     this.clearRetryTimer(numberId);
     const log = logger.child({ numberId, nickname: number.nickname });
     const { state, saveCreds } = await usePostgresAuthState(numberId);
-    const baileysLog = logger.child({ numberId, mod: 'baileys' }, { level: 'warn' });
+    const baileysLog = logger.child({ numberId, mod: 'baileys' }, { level: env.BAILEYS_LOG_LEVEL });
 
     // Status antes de criar o socket: daqui até registrar o handler de eventos não
     // pode haver await, senão um fechamento imediato (ex.: sem rede) passa despercebido.
     await this.setStatus(numberId, NumberStatus.CONNECTING);
 
+    // Versão atual do WhatsApp Web: com a embutida (antiga), o servidor encerra a conexão antes do QR.
+    // Depois de uma recusa do servidor, busca de novo em vez de usar o cache.
+    const { version, source } = await getWaVersion((this.retries.get(numberId)?.attempts ?? 0) > 0);
+    log.info({ version: version?.join('.') ?? 'embutida', source }, 'conectando ao WhatsApp');
+
     const sock = makeWASocket({
+      version,
       auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, baileysLog) },
       logger: baileysLog,
       // Identificar-se como app desktop é o que libera o histórico completo.
@@ -285,15 +294,27 @@ export class SessionManager {
           const retry = this.retries.get(numberId) ?? { attempts: 0 };
           retry.attempts++;
           this.retries.set(numberId, retry);
+          const paired = Boolean(sock.authState.creds.me);
+
+          // Ainda pareando e o WhatsApp recusa sempre: não adianta insistir, explica no painel.
+          if (!paired && retry.attempts >= MAX_PAIRING_FAILURES) {
+            this.retries.delete(numberId);
+            await prisma.waNumber.updateMany({ where: { id: numberId }, data: { autoConnect: false } });
+            await this.setStatus(numberId, NumberStatus.DISCONNECTED, {
+              reason: `O WhatsApp encerrou a conexão antes de gerar o QR Code (código ${code ?? '?'}, ${retry.attempts} tentativas). Confira a internet deste computador/servidor e tente de novo; se persistir, veja "Solução de problemas" no guia de operação.`,
+            });
+            return;
+          }
+
           const backoff = Math.min(MAX_BACKOFF_MS, 2_000 * 2 ** Math.min(retry.attempts - 1, 5));
-          await this.reconnect(numberId, backoff + Math.random() * 1_000);
+          await this.reconnect(numberId, backoff + Math.random() * 1_000, `Tentando conectar ao WhatsApp (tentativa ${retry.attempts + 1}; última resposta: código ${code ?? '?'})…`);
         }
       }
     }
   }
 
-  private async reconnect(numberId: string, delayMs: number): Promise<void> {
-    await this.setStatus(numberId, NumberStatus.CONNECTING);
+  private async reconnect(numberId: string, delayMs: number, reason?: string): Promise<void> {
+    await this.setStatus(numberId, NumberStatus.CONNECTING, { reason });
     const retry = this.retries.get(numberId) ?? { attempts: 0 };
     this.retries.set(numberId, retry);
     this.clearRetryTimer(numberId);

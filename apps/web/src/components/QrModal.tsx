@@ -58,7 +58,11 @@ export function QrModal({ number, onClose }: { number: WaNumber; onClose: () => 
               // eslint-disable-next-line @next/next/no-img-element
               <img src={image} alt="QR Code para parear o WhatsApp" className="h-full w-full p-3" />
             ) : (
-              <span className="text-sm text-slate-500">{status === 'CONNECTING' && qr ? 'Finalizando conexão…' : 'Gerando QR Code…'}</span>
+              <span className="px-6 text-center text-sm text-slate-500">
+                {status === 'CONNECTING' && qr ? 'Finalizando conexão…' : 'Gerando QR Code…'}
+                {/* Enquanto o WhatsApp recusa, mostra o motivo em vez de girar sem explicação. */}
+                {status === 'CONNECTING' && number.statusReason && <span className="mt-2 block text-xs text-amber-700">{number.statusReason}</span>}
+              </span>
             )}
           </div>
           {qr && status === 'QR_PENDING' && (
