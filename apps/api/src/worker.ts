@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { CampaignDispatcher } from './campaigns/dispatcher.js';
+import { failInterruptedCnpjImports } from './cnpj/importer.js';
 import { createCampaignWorker } from './jobs/campaign.js';
+import { createCnpjWorker } from './jobs/cnpj.js';
 import { createContactsWorker } from './jobs/contacts.js';
 import { createMediaWorker } from './jobs/media.js';
 import { createOutboundWorker } from './jobs/outbound.js';
@@ -37,7 +39,7 @@ async function main() {
   logger.info({ instanceId }, 'worker iniciado');
 
   const sessions = new SessionManager();
-  const workers = [createSessionWorker(sessions), createMediaWorker(sessions), createOutboundWorker(sessions), createContactsWorker(sessions), createCampaignWorker()];
+  const workers = [createSessionWorker(sessions), createMediaWorker(sessions), createOutboundWorker(sessions), createContactsWorker(sessions), createCampaignWorker(), createCnpjWorker()];
   const dispatcher = new CampaignDispatcher(sessions);
 
   let stopping = false;
@@ -67,6 +69,7 @@ async function main() {
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));
 
+  await failInterruptedCnpjImports();
   await sessions.boot();
   dispatcher.start();
 }

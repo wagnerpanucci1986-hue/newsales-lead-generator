@@ -1,9 +1,11 @@
-import { CampaignStatus, MediaStatus, RecipientStatus, Role, type Prisma } from '@prisma/client';
+import { CampaignStatus, LegalBasis, MediaStatus, RecipientStatus, Role, type Prisma } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { z } from 'zod';
 import { audienceFilterSchema, campaignStats, previewAudience } from '../../campaigns/audience.js';
+import { legalBasisProblem } from '../../campaigns/legal.js';
+import { getSetting } from '../../lib/settings.js';
 import { audit } from '../../lib/audit.js';
 import { sha256 } from '../../lib/crypto.js';
 import { publishEvent } from '../../lib/events.js';
@@ -44,6 +46,7 @@ const campaignBody = z
     longPauseMaxS: z.number().int().min(30).max(14400).default(900),
     simulateTyping: z.boolean().default(true),
     consentConfirmed: z.boolean().default(false),
+    legalBasis: z.enum(LegalBasis).nullish(),
   })
   .refine((c) => c.maxDelayS >= c.minDelayS, { message: 'o intervalo máximo deve ser maior ou igual ao mínimo', path: ['maxDelayS'] })
   .refine((c) => c.longPauseMaxS >= c.longPauseMinS, { message: 'a pausa longa máxima deve ser maior ou igual à mínima', path: ['longPauseMaxS'] });
@@ -98,6 +101,7 @@ function relations(body: z.infer<typeof campaignBody>) {
     longPauseMaxS: body.longPauseMaxS,
     simulateTyping: body.simulateTyping,
     consentConfirmed: body.consentConfirmed,
+    legalBasis: body.legalBasis ?? null,
   };
 }
 
@@ -217,7 +221,8 @@ export async function campaignRoutes(app: FastifyInstance) {
     const { id } = idParams.parse(req.params);
     const c = await load(id);
     if (c.status !== CampaignStatus.DRAFT) throw new HttpError(409, 'Esta campanha já foi iniciada');
-    if (!c.consentConfirmed) throw new HttpError(400, 'Confirme que os contatos deram consentimento para receber mensagens (LGPD).');
+    const legal = legalBasisProblem(c, (await getSetting('optOut')).keywords);
+    if (legal) throw new HttpError(400, legal);
     if (!c.body.trim() && !c.media) throw new HttpError(400, 'Escreva a mensagem ou adicione um anexo.');
     if (!c.numbers.length) throw new HttpError(400, 'Escolha ao menos um número para enviar.');
     const filter = audienceFilterSchema.parse(c.audienceFilter ?? {});
@@ -226,7 +231,7 @@ export async function campaignRoutes(app: FastifyInstance) {
     const scheduled = c.scheduledAt && c.scheduledAt > new Date();
     await prisma.campaign.update({ where: { id }, data: { status: CampaignStatus.SCHEDULED, scheduledAt: scheduled ? c.scheduledAt : null } });
     if (!scheduled) await campaignQueue.add('start', { kind: 'start', campaignId: id }, { jobId: `start-${id}` });
-    await audit({ userId: req.user.id, action: 'campaign.start', entity: 'Campaign', entityId: id, meta: { scheduledAt: scheduled ? c.scheduledAt : null, consentConfirmed: true }, ip: req.ip });
+    await audit({ userId: req.user.id, action: 'campaign.start', entity: 'Campaign', entityId: id, meta: { scheduledAt: scheduled ? c.scheduledAt : null, consentConfirmed: true, legalBasis: c.legalBasis }, ip: req.ip });
     await publishEvent({ type: 'campaign.updated', payload: { campaignId: id } });
     return { campaign: dto(await load(id), await campaignStats([id])) };
   });

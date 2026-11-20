@@ -30,7 +30,7 @@ COPY apps/api/prisma apps/api/prisma
 RUN npx prisma generate --schema apps/api/prisma/schema.prisma
 COPY --from=build /app/apps/api/dist apps/api/dist
 # Pasta das mídias com dono "node": o volume nomeado herda essa permissão na primeira vez.
-RUN mkdir -p /data/media && chown -R node:node /data/media
+RUN mkdir -p /data/media /data/cnpj-tmp && chown -R node:node /data/media /data/cnpj-tmp
 USER node
 EXPOSE 4000
 CMD ["node", "apps/api/dist/server.js"]

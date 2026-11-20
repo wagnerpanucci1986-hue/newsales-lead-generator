@@ -43,6 +43,7 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
     longPauseMaxS: campaign?.longPauseMaxS ?? 900,
     simulateTyping: campaign?.simulateTyping ?? true,
     consentConfirmed: campaign?.consentConfirmed ?? false,
+    legalBasis: (campaign?.legalBasis ?? '') as '' | 'CONSENT' | 'LEGITIMATE_INTEREST',
   });
   const [file, setFile] = useState<File | null>(null);
   const [removeMedia, setRemoveMedia] = useState(false);
@@ -87,12 +88,13 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
 
   async function save(start: boolean) {
     setError(null);
-    if (start && !form.consentConfirmed) return setError('Para iniciar, confirme que os contatos autorizaram o recebimento de mensagens.');
+    if (start && !form.legalBasis) return setError('Para iniciar, escolha a base legal do público.');
+    if (start && !form.consentConfirmed) return setError('Para iniciar, confirme a base legal do público.');
     if (start && !window.confirm(form.scheduledAt ? 'Agendar esta campanha?' : `Iniciar o envio agora para ${preview?.audience.willSend.toLocaleString('pt-BR') ?? 'os'} contatos?`)) return;
     setSaving(true);
     try {
-      const { tagIds, onlyWaValid, scheduledAt, ...rest } = form;
-      const body = { ...rest, audienceFilter: { tagIds, onlyWaValid }, scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null };
+      const { tagIds, onlyWaValid, scheduledAt, legalBasis, ...rest } = form;
+      const body = { ...rest, legalBasis: legalBasis || null, audienceFilter: { tagIds, onlyWaValid }, scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null };
       const saved = await api<{ campaign: Campaign }>(campaign ? `/campaigns/${campaign.id}` : '/campaigns', { method: campaign ? 'PUT' : 'POST', body });
       const id = saved.campaign.id;
       if (file) {
@@ -274,9 +276,29 @@ export function CampaignForm({ campaign }: { campaign?: Campaign }) {
       </section>
 
       <section className="card space-y-3 p-5">
+        <fieldset>
+          <legend className="font-semibold">Base legal do público (LGPD)</legend>
+          <div className="mt-2 grid gap-2 md:grid-cols-2">
+            {([
+              ['CONSENT', 'Consentimento', 'Os contatos autorizaram receber mensagens (formulário, cadastro, conversa anterior).'],
+              ['LEGITIMATE_INTEREST', 'Legítimo interesse', 'Prospecção B2B de empresas, como a base de CNPJ. Exige ensinar a sair na própria mensagem.'],
+            ] as const).map(([value, title, hint]) => (
+              <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm ${form.legalBasis === value ? 'border-brand-600 bg-brand-50' : 'border-slate-200'}`}>
+                <input type="radio" name="legalBasis" className="mt-0.5 accent-emerald-600" checked={form.legalBasis === value} onChange={() => set('legalBasis', value)} />
+                <span><strong>{title}</strong><span className="block text-xs text-slate-600">{hint}</span></span>
+              </label>
+            ))}
+          </div>
+          {form.legalBasis === 'LEGITIMATE_INTEREST' && !/\b(sair|parar|stop|cancelar|descadastrar)\b/i.test(form.body) && (
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-amber-800">
+              A mensagem ainda não diz como sair.
+              <button type="button" className="font-medium text-brand-700 underline" onClick={() => set('body', `${form.body.trimEnd()}\n\nSe não quiser receber nossas mensagens, responda SAIR.`)}>Inserir frase de saída</button>
+            </p>
+          )}
+        </fieldset>
         <label className="flex items-start gap-3 text-sm">
           <input type="checkbox" className="mt-0.5 h-4 w-4 accent-emerald-600" checked={form.consentConfirmed} onChange={(e) => set('consentConfirmed', e.target.checked)} />
-          <span><strong>Confirmo que os contatos deste público autorizaram o recebimento de mensagens</strong> e que a origem dessa autorização está registrada. Esta confirmação fica gravada no log de auditoria com meu usuário.</span>
+          <span><strong>Confirmo a base legal escolhida para este público</strong> e que a origem dos contatos está registrada. Esta confirmação fica gravada no log de auditoria com meu usuário.</span>
         </label>
         {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <div className="flex flex-wrap justify-end gap-2">

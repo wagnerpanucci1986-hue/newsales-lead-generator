@@ -10,3 +10,5 @@ next-env.d.ts
 *.tsbuildinfo
 !apps/web/.env.development
 backups/
+dados-cnpj/*
+!dados-cnpj/LEIA-ME.txt

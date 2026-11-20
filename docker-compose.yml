@@ -108,9 +108,15 @@ services:
     restart: unless-stopped
     init: true
     command: ["node", "apps/api/dist/worker.js"]
-    environment: *backend-env
+    environment:
+      <<: *backend-env
+      CNPJ_LOCAL_DIR: /data/cnpj-local
+      CNPJ_TMP_DIR: /data/cnpj-tmp
     volumes:
       - media:/data/media
+      # Captação: ZIPs da Receita baixados à mão (opcional) e área temporária dos downloads.
+      - ./dados-cnpj:/data/cnpj-local:ro
+      - cnpj_tmp:/data/cnpj-tmp
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
@@ -149,3 +155,4 @@ volumes:
   media:
   caddy_data:
   caddy_config:
+  cnpj_tmp:

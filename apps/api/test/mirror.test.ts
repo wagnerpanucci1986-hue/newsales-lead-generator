@@ -14,7 +14,7 @@ let seq = 0;
 const now = () => Math.floor(Date.now() / 1000);
 
 async function setup(opts: { pnForLid?: string | null } = {}) {
-  const number = await prisma.waNumber.create({ data: { nickname: `teste-${Date.now()}-${seq++}` } });
+  const number = await prisma.waNumber.create({ data: { nickname: `tm-${Date.now()}-${seq++}` } });
   const queued: string[] = [];
   const mirror = new Mirror({
     numberId: number.id,
@@ -38,7 +38,7 @@ before(async () => {
   await prisma.contact.deleteMany({ where: { phone: { startsWith: '55119888877' } } });
 });
 after(async () => {
-  await prisma.waNumber.deleteMany({ where: { nickname: { startsWith: 'teste-' } } });
+  await prisma.waNumber.deleteMany({ where: { nickname: { startsWith: 'tm-' } } });
   await prisma.contact.deleteMany({ where: { phone: { startsWith: '55119888877' } } });
   await prisma.$disconnect();
   redis.disconnect();

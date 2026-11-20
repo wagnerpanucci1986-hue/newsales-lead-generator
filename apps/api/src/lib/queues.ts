@@ -39,12 +39,22 @@ export const outboundQueue = new Queue<OutboundJob>(QUEUE_OUTBOUND, {
 
 export type ContactsJob =
   | { kind: 'import'; importId: string }
+  // Empresas da base de CNPJ → Contatos (usa um ImportJob para acompanhar).
+  | { kind: 'cnpj-contacts'; importId: string }
   // Verifica no WhatsApp os contatos ainda não checados (de uma lista, de uma importação ou todos).
   | { kind: 'verify'; numberId: string; listId?: string; contactIds?: string[] };
 
 export const contactsQueue = new Queue<ContactsJob>(QUEUE_CONTACTS, {
   connection,
   defaultJobOptions: { removeOnComplete: 100, removeOnFail: 500, attempts: 1 },
+});
+
+/** Atualização da base de captação (download e filtragem dos arquivos da Receita). */
+export const QUEUE_CNPJ = 'cnpj';
+export type CnpjJob = { importId: string };
+export const cnpjQueue = new Queue<CnpjJob>(QUEUE_CNPJ, {
+  connection,
+  defaultJobOptions: { removeOnComplete: 20, removeOnFail: 50, attempts: 1 },
 });
 
 /** Monta os destinatários e coloca a campanha em andamento. */
@@ -57,5 +67,5 @@ export const campaignQueue = new Queue<CampaignJob>(QUEUE_CAMPAIGN, {
 
 /** Fecha as conexões de todas as filas (encerramento da API e testes). */
 export async function closeQueues(): Promise<void> {
-  await Promise.allSettled([sessionQueue, mediaQueue, outboundQueue, contactsQueue, campaignQueue].map((q) => q.close()));
+  await Promise.allSettled([sessionQueue, mediaQueue, outboundQueue, contactsQueue, campaignQueue, cnpjQueue].map((q) => q.close()));
 }

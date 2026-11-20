@@ -85,6 +85,7 @@ export interface Campaign {
   longPauseMaxS: number;
   simulateTyping: boolean;
   consentConfirmed: boolean;
+  legalBasis: 'CONSENT' | 'LEGITIMATE_INTEREST' | null;
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;

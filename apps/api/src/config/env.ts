@@ -35,6 +35,12 @@ const schema = z.object({
   // Como o sistema se identifica ao WhatsApp. "chrome" (padrão) = WhatsApp Web no navegador.
   // "desktop" = app de computador, pede o histórico completo, mas o WhatsApp pode recusar o pareamento.
   WA_BROWSER: z.enum(['chrome', 'desktop']).default('chrome'),
+  // Captação pela base de CNPJ da Receita Federal.
+  CNPJ_LOCAL_DIR: z.string().default('./dados-cnpj'), // ZIPs baixados à mão (opcional)
+  CNPJ_TMP_DIR: z.string().optional(), // onde os ZIPs baixados ficam enquanto são lidos
+  CNPJ_LISTING_URL: z.string().default('https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj/'),
+  CNPJ_NEXTCLOUD_URL: z.string().default('https://arquivos.receitafederal.gov.br'),
+  CNPJ_NEXTCLOUD_TOKEN: z.string().default('YggdBLfdninEJX9'),
   BAILEYS_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('warn'),
 
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),

@@ -13,6 +13,7 @@ export type AppEvent =
   | { type: 'conversation.updated'; numberId: string; payload: { conversationId: string } }
   // Eventos sem número (campanhas, importações): vão só para Admin/Gestor.
   | { type: 'campaign.updated'; numberId?: undefined; payload: { campaignId: string } }
+  | { type: 'cnpj.updated'; numberId?: undefined; payload: { importId: string } }
   | { type: 'import.updated'; numberId?: undefined; payload: { importId: string; status: string } }
   | { type: 'media.ready'; numberId: string; payload: { conversationId: string; messageId: string; status: string } };
 

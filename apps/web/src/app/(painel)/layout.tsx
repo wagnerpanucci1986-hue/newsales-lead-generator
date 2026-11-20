@@ -11,6 +11,7 @@ const MANAGERS = ['ADMIN', 'MANAGER'] as const;
 const NAV: { href: string; label: string; roles: readonly string[] }[] = [
   { href: '/dashboard', label: 'Visão geral', roles: ALL },
   { href: '/conversas', label: 'Conversas', roles: ALL },
+  { href: '/captacao', label: 'Captação', roles: MANAGERS },
   { href: '/campanhas', label: 'Campanhas', roles: MANAGERS },
   { href: '/contatos', label: 'Contatos', roles: MANAGERS },
   { href: '/automacoes', label: 'Automações', roles: MANAGERS },

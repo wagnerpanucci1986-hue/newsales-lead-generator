@@ -525,14 +525,15 @@ model Campaign {
   windowEnd   String    @default("18:00")
 
   // Anti-banimento (sobrepõe os padrões globais).
-  minDelayS        Int     @default(15)
-  maxDelayS        Int     @default(60)
-  longPauseEvery   Int     @default(20) // pausa longa a cada N mensagens (por número)
-  longPauseMinS    Int     @default(300)
-  longPauseMaxS    Int     @default(900)
-  simulateTyping   Boolean @default(true)
-  // LGPD: quem criou declarou que a base tem consentimento. Obrigatório para iniciar.
-  consentConfirmed Boolean @default(false)
+  minDelayS        Int         @default(15)
+  maxDelayS        Int         @default(60)
+  longPauseEvery   Int         @default(20) // pausa longa a cada N mensagens (por número)
+  longPauseMinS    Int         @default(300)
+  longPauseMaxS    Int         @default(900)
+  simulateTyping   Boolean     @default(true)
+  // LGPD: quem criou confirmou a base legal do público. Obrigatório para iniciar.
+  consentConfirmed Boolean     @default(false)
+  legalBasis       LegalBasis?
 
   // Os números do relatório são sempre contados em CampaignRecipient (fonte única).
   totalRecipients Int @default(0)
@@ -660,4 +661,95 @@ model AutomationRule {
   media  Media?    @relation(fields: [mediaId], references: [id], onDelete: SetNull)
 
   @@index([enabled, trigger, priority])
+}
+
+// Base legal declarada para uma campanha (LGPD).
+enum LegalBasis {
+  CONSENT // os contatos autorizaram o recebimento
+  LEGITIMATE_INTEREST // prospecção B2B de empresas, com descadastro em toda mensagem
+}
+
+// ───────────────────────── Captação: base pública de CNPJ (Receita Federal) ─────────────────────────
+// Só estabelecimentos ATIVOS e COM TELEFONE das UFs importadas. Tabelas grandes e
+// independentes do resto: nada aqui é contato até alguém importar pela tela de Captação.
+
+model CnpjEstablishment {
+  cnpj             String    @id // 14 caracteres; aceita o CNPJ alfanumérico (2026)
+  cnpjBase         String
+  isMatriz         Boolean
+  nomeFantasia     String?
+  cnaePrincipal    String
+  cnaesSecundarios String[]
+  uf               String
+  municipioCodigo  String
+  municipio        String?
+  bairro           String?
+  cep              String?
+  endereco         String?
+  phone            String? // primeiro telefone válido, E.164 sem "+"
+  mobile           String? // primeiro celular válido, E.164 sem "+"
+  hasMobile        Boolean   @default(false)
+  // Quantas empresas (CNPJ base) usam o mesmo telefone: alto = em geral, o contador.
+  phoneShared      Int       @default(1)
+  email            String?
+  dataInicio       DateTime? @db.Date
+  importId         String // última importação que trouxe esta linha
+
+  @@index([uf, municipioCodigo])
+  @@index([cnaePrincipal])
+  @@index([cnaesSecundarios], type: Gin)
+  @@index([cnpjBase])
+  @@index([importId])
+  @@index([phoneShared])
+}
+
+model CnpjCompany {
+  cnpjBase         String  @id
+  razaoSocial      String
+  naturezaJuridica String?
+  capitalSocial    Float?
+  porte            String? // 00 não informado, 01 micro, 03 pequeno porte, 05 demais
+  isMei            Boolean @default(false)
+  isSimples        Boolean @default(false)
+
+  @@index([porte])
+  @@index([capitalSocial])
+}
+
+model CnpjCnae {
+  code        String @id // 7 dígitos
+  description String
+}
+
+model CnpjMunicipio {
+  code String @id // código da Receita (não é o do IBGE)
+  name String
+}
+
+model CnpjNatureza {
+  code        String @id
+  description String
+}
+
+enum CnpjImportStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// Cada atualização da base (download e filtragem dos arquivos da Receita).
+model CnpjImport {
+  id          String           @id @default(cuid())
+  status      CnpjImportStatus @default(RUNNING)
+  ufs         String[]
+  source      String? // de onde vieram os arquivos
+  competencia String? // pasta AAAA-MM da Receita, quando conhecida
+  progress    String? // última etapa, para a tela
+  stats       Json?
+  error       String?
+  createdById String?
+  startedAt   DateTime         @default(now())
+  finishedAt  DateTime?
+
+  @@index([startedAt])
 }
